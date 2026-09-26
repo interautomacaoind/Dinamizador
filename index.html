@@ -26,6 +26,7 @@
   #clk { font-variant-numeric:tabular-nums; min-width:210px; color:var(--mu); }
   #clk b { color:var(--tx); }
   #vrslot { display:flex; } #vrslot button { position:static !important; transform:none !important; left:auto !important; bottom:auto !important; }
+  #guia { display:none; position:fixed; left:50%; top:128px; transform:translateX(-50%); max-width:86vw; color:#fff; background:rgba(20,90,55,.9); padding:8px 14px; border-radius:12px; font-weight:600; z-index:24; text-align:center; font-size:14px; }
   #optoast, #artoast { display:none; position:fixed; left:50%; top:78px; transform:translateX(-50%); max-width:86vw; color:#fff; padding:10px 16px; border-radius:12px; font-weight:600; z-index:25; text-align:center; }
   #artoast { top:auto; bottom:84px; position:absolute; }
   #arui { display:none; position:fixed; inset:0; pointer-events:none; z-index:30; font:15px/1.35 system-ui,sans-serif; }
@@ -55,11 +56,11 @@
   <span id="clk"></span>
   <select id="cam" title="Câmera">
     <option value="geral">Visão geral</option><option value="operadora">Seguir operadora</option><option value="supervisor">Seguir supervisor</option>
-    <option value="m1">Máquina M1</option><option value="bocais">Bocais M1 (pipetagem)</option><option value="tv">TV de indicadores</option><option value="tanque">Tanque TQ-01</option><option value="livre">Livre</option>
+    <option value="m1">Máquina M1</option><option value="bocais">Bocais M1 (pipetagem)</option><option value="tv">TV de indicadores</option><option value="tanque">Tanque TQ-01</option><option value="entrada2">Porta do Espaço Memória</option><option value="memoria">Espaço Memória (Grupo Real)</option><option value="livre">Livre</option>
   </select>
   <button id="snd" class="on" title="Som">🔊</button>
   <span id="vrslot"></span>
-  <small style="color:#9fb0bf;flex-basis:100%">Modo Operar: clique/toque na IHM, portas e bocais (Quest: gatilho clica; clique na pipeta para pegar, gatilho com a ponta no frasco aspira e no bocal dispensa; grip devolve; Y avança) · AR no celular: aponte para o piso até aparecer o marcador branco, toque para posicionar; depois 1 dedo arrasta, 2 dedos giram (maquete: pinça muda a escala), botão Reposicionar · AR no Quest: aponte e aperte o gatilho (ou pinça da mão) para posicionar; segure o gatilho para arrastar, analógico dir. gira, X reposiciona · VR: analógico esq. anda, dir. gira · A = play/pausa · B = velocidade · Desktop: arraste para girar, roda do mouse aproxima</small>
+  <small style="color:#9fb0bf;flex-basis:100%">Espaço Memória: clique/toque na porta branca à esquerda da parede de entrada para abrir (história da Real H e vitrine CMR) · Modo Operar: EPI (álcool gel, luvas, quadro), tablet de lote, botões INICIAR/PARAR/REARME/EMERGÊNCIA, garrafões ↔ carrinho, falhas simuladas e 🧭 guiado; no Quest o grip pega e carrega objetos e o dedo aperta botões · clique/toque na IHM, portas e bocais (Quest: gatilho clica; clique na pipeta para pegar, gatilho com a ponta no frasco aspira e no bocal dispensa; grip devolve; Y avança) · AR no celular: aponte para o piso até aparecer o marcador branco, toque para posicionar; depois 1 dedo arrasta, 2 dedos giram (maquete: pinça muda a escala), botão Reposicionar · AR no Quest: aponte e aperte o gatilho (ou pinça da mão) para posicionar; segure o gatilho para arrastar, analógico dir. gira, X reposiciona · VR: analógico esq. anda, dir. gira · A = play/pausa · B = velocidade · Desktop: arraste para girar, roda do mouse aproxima</small>
 </div>
 <script type="module" src="./app.js"></script>
 </body>

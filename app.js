@@ -162,13 +162,20 @@ function state(mn, t) {
     else if (t < c.abre[1]) st.k = 'ABRINDO';
     else st.k = c.n >= 2 ? 'CONCLUIDO' : 'FIM_CICLO';
   }
+  const c = st.cyc;
+  if (c) {
+    if (c.stop !== undefined && t >= c.stop) st.k = c.fault === 'motor' ? 'FALHA' : c.emerg ? 'EMERGENCIA' : 'PARADA';
+    else if (c.hold && t >= c.hold.t0 && !(c.hold.resume !== undefined && t >= c.hold.resume)) st.k = 'SEM_SOLUCAO';
+  }
   return st;
 }
 const LABEL = { PRONTA: 'PRONTA', AGENDADA: 'PARTIDA PROGRAMADA', FECHANDO: 'FECHANDO CABEÇOTES', DOSANDO: 'DOSANDO SOL. HIDROALCOÓLICA 20%',
   PIPETAR: 'PIPETAR ATIVO P1–P6', VALIDANDO: 'SENSORES 6/6 OK', DINAMIZANDO: 'DINAMIZANDO', PAUSA: 'ESTABILIZANDO', DRENANDO: 'DRENANDO → TQ-01',
-  ABRINDO: 'ABRINDO CABEÇOTES', FIM_CICLO: 'CICLO CONCLUÍDO', CONCLUIDO: 'LOTE CONCLUÍDO' };
+  ABRINDO: 'ABRINDO CABEÇOTES', FIM_CICLO: 'CICLO CONCLUÍDO', CONCLUIDO: 'LOTE CONCLUÍDO',
+  PARADA: 'MÁQUINA PARADA', EMERGENCIA: 'EMERGÊNCIA ACIONADA', FALHA: 'FALHA MOTOR (INVERSOR)', SEM_SOLUCAO: 'FALTA DE SOLUÇÃO' };
 const COLOR = { PRONTA: '#9fb0bf', AGENDADA: '#9fb0bf', FECHANDO: '#3d8bfd', DOSANDO: '#3d8bfd', PIPETAR: '#f5b31a', VALIDANDO: '#2fbf71', DINAMIZANDO: '#2fbf71',
-  PAUSA: '#2fbf71', DRENANDO: '#19b3c9', ABRINDO: '#3d8bfd', FIM_CICLO: '#9fb0bf', CONCLUIDO: '#9fb0bf' };
+  PAUSA: '#2fbf71', DRENANDO: '#19b3c9', ABRINDO: '#3d8bfd', FIM_CICLO: '#9fb0bf', CONCLUIDO: '#9fb0bf',
+  PARADA: '#f5b31a', EMERGENCIA: '#ff5b4a', FALHA: '#ff5b4a', SEM_SOLUCAO: '#ff5b4a' };
 function fitFont(g, txt, maxW, px, weight = 'bold') {       // reduz a fonte até caber (nada cortado)
   let p = px; g.font = `${weight} ${p}px system-ui,sans-serif`;
   while (g.measureText(txt).width > maxW && p > 9) { p -= 1; g.font = `${weight} ${p}px system-ui,sans-serif`; }
@@ -261,13 +268,17 @@ function drawIHM(m, mn, t) {
   } else if (st.k === 'FIM_CICLO' || st.k === 'CONCLUIDO') {
     g.fillText(`Tempo do ciclo: ${ms((c.end - c.start) * K)}`, 12, 130);
     g.fillText(`Produzido: ${(21.6 * c.n).toFixed(1).replace('.', ',')} L`, 12, 154);
+  } else if (['PARADA', 'EMERGENCIA', 'FALHA', 'SEM_SOLUCAO'].includes(st.k)) {
+    const T_ = { PARADA: ['Ciclo interrompido pelo operador', 'REARME → INICIAR reinicia o ciclo'], EMERGENCIA: ['Cogumelo acionado: destrave e REARME', 'Depois INICIAR reinicia o ciclo'],
+      FALHA: ['Inversor desarmou por sobrecorrente', 'Aguarde, REARME e INICIAR'], SEM_SOLUCAO: ['Nível baixo no tanque de solução 20%', 'Toque a IHM para solicitar reposição'] }[st.k];
+    g.fillText(T_[0], 12, 130); g.fillText(T_[1], 12, 154);
   } else if (st.k === 'FECHANDO' || st.k === 'ABRINDO') {
     const [a, b] = st.k === 'FECHANDO' ? c.fecha : c.abre; bar(130, (t - a) / (b - a), '#3d8bfd');
   } else {
     g.fillText('Garrafões posicionados · portas fechadas', 12, 130); g.fillText(mn === 'M1' ? 'Toque PARTIDA ESCALONADA' : 'Toque INICIAR CICLO', 12, 154);
   }
   if (st.k !== 'PIPETAR' && st.k !== 'VALIDANDO') {
-    const bl = st.k === 'PRONTA' && mn === 'M1' ? 'PARTIDA ESCALONADA' : 'INICIAR CICLO';
+    const bl = st.k === 'PRONTA' && mn === 'M1' ? 'PARTIDA ESCALONADA' : st.k === 'SEM_SOLUCAO' ? 'SOLICITAR REPOSIÇÃO' : ['PARADA', 'EMERGENCIA', 'FALHA'].includes(st.k) ? 'REARME / INICIAR' : 'INICIAR CICLO';
     g.fillStyle = '#1f7a4a'; g.fillRect(222, 204, 168, 28); g.fillStyle = '#fff'; fitFont(g, bl, 156, 14); g.fillText(bl, 230, 223);
   } else {
     const ok = pipCount(c, t) === 6;
@@ -283,7 +294,7 @@ function drawIHM(m, mn, t) {
   const auto = ['FECHANDO', 'DOSANDO', 'VALIDANDO', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO'].includes(st.k);
   if (m.tower.verde) m.tower.verde.visible = auto;
   if (m.tower.amarelo) m.tower.amarelo.visible = (st.k === 'PIPETAR' && blink) || ['PRONTA', 'AGENDADA', 'FIM_CICLO', 'CONCLUIDO'].includes(st.k);
-  if (m.tower.vermelho) m.tower.vermelho.visible = !!(OP && OP.msg[mn] && OP.msg[mn].err && t < OP.msg[mn].until && blink);
+  if (m.tower.vermelho) m.tower.vermelho.visible = !!(OP && ((OP.msg[mn] && OP.msg[mn].err && t < OP.msg[mn].until) || ['EMERGENCIA', 'FALHA', 'SEM_SOLUCAO'].includes(st.k)) && blink);
 }
 
 function drawTV(t) {
@@ -534,6 +545,8 @@ const VIEWS = {
   bocais: [B(1.95, -2.9, 1.95), B(2.95, -2.32, 1.33)],
   tv: [B(0, 0.8, 1.7), B(0, 4.9, 2.9)],
   tanque: [B(2.0, -2.6, 1.8), B(0.1, 0.0, 1.0)],
+  memoria: [B(-2.5, -5.6, 1.7), B(-2.5, -9.0, 1.3)],
+  entrada2: [B(-1.9, -3.3, 1.65), B(-4.3, -5.2, 1.15)],
 };
 let camMode = 'geral';
 function setView(v) {
@@ -741,7 +754,8 @@ renderer.xr.addEventListener('sessionstart', () => {
   if (OP) {
     const ses = renderer.xr.getSession();
     if (XR.mode !== 'ar') ses.addEventListener('selectstart', (e) => OP.xrSelect(e));
-    ses.addEventListener('squeezestart', (e) => OP.xrSqueeze(e));
+    ses.addEventListener('squeezestart', (e) => OP.xrSqueezeStart(e));
+    ses.addEventListener('squeezeend', (e) => OP.xrSqueezeEnd(e));
   }
   initAudio(); if (!st.playing) togglePlay(); uiState();
 });
@@ -820,6 +834,236 @@ function drawFases(t) {
     + `<div><b>TQ</b><i style="background:#19b3c9"></i><span>${tankVol(t).toFixed(1).replace('.', ',')} L no tanque de passagem</span></div>`;
 }
 
+// ------------------------------------------------------------------ ESPAÇO MEMÓRIA · GRUPO REAL (sala 5 × 5 m, 2ª porta na parede frontal)
+// Quadros com a história da Real H e a vitrine dos produtos CMR Saúde / Homeopet (fontes públicas; embalagens ilustrativas).
+const SR = (() => {
+  const G = new THREE.Group(); G.name = 'ESPACO_MEMORIA'; world.add(G);
+  const DX0 = -4.75, DX1 = -3.60, DH = 2.20, YW = -5.0, WT = 0.12;       // vão da porta (coordenadas Blender)
+  const RX0 = -5.0, RX1 = 0.0, RY0 = -10.0, RY1 = YW - WT, RH2 = 3.2;     // sala 5 × 5 m (interna)
+  const Bv = (x, y, z) => B(x, y, z);
+  // ---- abre o vão na parede frontal da sala de dinamização (remove a parede/rodapé/juntas originais à esquerda da porta de entrada)
+  let wallMat = null, epoxiMat = null;
+  sala.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.geometry.index) return;
+    const mn = [].concat(o.material).map((m) => m.name).join('|');
+    const isWall = /Parede painel branco/.test(mn), isJ = /Junta de painel/.test(mn), isEp = /Piso epoxi/.test(mn);
+    if (!isWall && !isJ && !isEp) return;
+    if (isWall && !wallMat) wallMat = [].concat(o.material)[0];
+    if (isEp && !epoxiMat) epoxiMat = [].concat(o.material)[0];
+    o.updateWorldMatrix(true, false);
+    const pos = o.geometry.attributes.position, idx = o.geometry.index.array, keep = [], v = new THREE.Vector3();
+    const inv = new THREE.Matrix4().copy(world.matrixWorld).invert();
+    const P = (i) => v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(inv).clone();
+    for (let f = 0; f < idx.length; f += 3) {
+      const a = P(idx[f]), b = P(idx[f + 1]), c = P(idx[f + 2]);
+      const zs = [a.z, b.z, c.z], xs = [a.x, b.x, c.x], ys = [a.y, b.y, c.y];
+      let drop = false;
+      if ((isWall || isJ) && Math.min(...zs) >= 4.99 && Math.max(...xs) <= 3.0001) drop = true;          // parede frontal A + juntas
+      if (isEp && Math.min(...zs) >= 4.89 && Math.max(...ys) <= 0.105 && Math.max(...xs) <= 3.0001 && Math.min(...ys) > -0.001) drop = true;   // rodapé frontal A
+      if (!drop) keep.push(idx[f], idx[f + 1], idx[f + 2]);
+    }
+    if (keep.length !== idx.length) { o.geometry = o.geometry.clone(); o.geometry.setIndex(keep); }
+  });
+  wallMat = wallMat || new THREE.MeshStandardMaterial({ color: 0xe9ebe9, roughness: 0.6 });
+  const box = (x0, x1, y0, y1, z0, z1, m, parent = G) => {
+    const g = new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0);
+    const o = new THREE.Mesh(g, m); o.position.copy(Bv((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)); parent.add(o); return o;
+  };
+  const shellAdd = (o) => { if (typeof shell !== 'undefined') shell.push(o); return o; };
+  // parede frontal reconstruída com o vão
+  const RODAPE = new THREE.MeshStandardMaterial({ color: 0x8c9296, roughness: 0.35 });
+  const JUNTA = new THREE.MeshStandardMaterial({ color: 0x8b9092, roughness: 0.5 });
+  shellAdd(box(-5.0, DX0, YW - WT, YW, 0, 4.5, wallMat));
+  shellAdd(box(DX1, 3.0, YW - WT, YW, 0, 4.5, wallMat));
+  shellAdd(box(DX0, DX1, YW - WT, YW, DH, 4.5, wallMat));
+  shellAdd(box(-5.0, DX0, YW, YW + 0.1, 0, 0.1, RODAPE)); shellAdd(box(DX1, 3.0, YW, YW + 0.1, 0, 0.1, RODAPE));
+  for (const x of [-2.6, -1.4, -0.2, 1.0, 2.2]) shellAdd(box(x - 0.003, x + 0.003, YW, YW + 0.002, 0.1, 4.5, JUNTA));
+  // ---- porta (1 folha, abre para dentro do Espaço Memória), batente inox e placas dos dois lados
+  const INOX = new THREE.MeshStandardMaterial({ color: 0xb9bdc1, metalness: 0.85, roughness: 0.32 });
+  const BRANCO = new THREE.MeshStandardMaterial({ color: 0xf1f2f0, roughness: 0.45 });
+  const VIDRO = new THREE.MeshStandardMaterial({ color: 0xc8dde6, roughness: 0.05, transparent: true, opacity: 0.25 });
+  box(DX0 - 0.05, DX0, YW - WT - 0.01, YW + 0.01, 0, DH + 0.05, INOX); box(DX1, DX1 + 0.05, YW - WT - 0.01, YW + 0.01, 0, DH + 0.05, INOX);
+  box(DX0 - 0.05, DX1 + 0.05, YW - WT - 0.01, YW + 0.01, DH, DH + 0.05, INOX);
+  const hinge = new THREE.Group(); hinge.position.copy(Bv(DX1 - 0.01, YW - 0.06, 0)); G.add(hinge);
+  const LW = DX1 - DX0 - 0.03;
+  const leaf = new THREE.Group(); hinge.add(leaf);
+  const lb = (x0, x1, y0, y1, z0, z1, m) => { const o = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, z1 - z0, y1 - y0), m); o.position.set((x0 + x1) / 2, (z0 + z1) / 2, -(y0 + y1) / 2); leaf.add(o); return o; };
+  lb(-LW, 0, -0.022, 0.022, 0.01, DH - 0.01, BRANCO);
+  lb(-LW * 0.72, -LW * 0.28, -0.025, 0.025, 1.25, 1.85, VIDRO);
+  lb(-LW + 0.10, -LW + 0.26, 0.025, 0.045, 1.03, 1.07, INOX); lb(-LW + 0.10, -LW + 0.26, -0.045, -0.025, 1.03, 1.07, INOX);
+  function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
+  function plane(w, h, tex, pos, rotY, parent = G, basic = false) {
+    const m = basic ? new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }) : new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 });
+    const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.copy(pos); o.rotation.y = rotY; parent.add(o); return o;
+  }
+  const VERDE = '#0f5132', DOURADO = '#c9a24a', CREME = '#f7f3ea', TINTA = '#1e2a24';
+  function wrap(g, text, x, y, maxW, lh) { const words = text.split(' '); let line = ''; for (const w of words) { const t = line ? line + ' ' + w : w; if (g.measureText(t).width > maxW && line) { g.fillText(line, x, y); y += lh; line = w; } else line = t; } if (line) g.fillText(line, x, y); return y + lh; }
+  const signTex = canvasTex(1024, 256, (g, w, h) => { g.fillStyle = VERDE; g.fillRect(0, 0, w, h); g.strokeStyle = DOURADO; g.lineWidth = 10; g.strokeRect(12, 12, w - 24, h - 24);
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 86px Georgia,serif'; g.fillText('ESPAÇO MEMÓRIA', w / 2, 120); g.font = '44px Georgia,serif'; g.fillStyle = DOURADO; g.fillText('Grupo Real · Real H · CMR Saúde', w / 2, 196); });
+  plane(1.1, 0.275, signTex, Bv((DX0 + DX1) / 2, YW + 0.004, DH + 0.35), Math.PI, G);        // lado da sala de dinamização (voltada para +y Blender)
+  plane(1.1, 0.275, signTex, Bv((DX0 + DX1) / 2, YW - WT - 0.004, DH + 0.35), 0, G);          // lado do Espaço Memória
+  // ---- Espaço Memória: piso de madeira, paredes, forro, iluminação
+  const woodTex = canvasTex(1024, 1024, (g, w, h) => { for (let i = 0; i < 16; i++) { const y = i * 64; const b = 150 + ((i * 53) % 30); g.fillStyle = `rgb(${b},${Math.round(b * 0.72)},${Math.round(b * 0.46)})`; g.fillRect(0, y, w, 64);
+    for (let k = 0; k < 40; k++) { g.strokeStyle = `rgba(60,35,15,${0.06 + ((k * 7) % 5) * 0.02})`; g.beginPath(); const yy = y + ((k * 37) % 64); g.moveTo(0, yy); g.bezierCurveTo(w * 0.3, yy + 4, w * 0.6, yy - 4, w, yy + 2); g.stroke(); }
+    g.fillStyle = 'rgba(40,20,5,.5)'; g.fillRect(0, y, w, 2); for (let s = (i * 211) % 400; s < w; s += 420) g.fillRect(s, y, 2, 64); } });
+  woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping; woodTex.repeat.set(2.5, 2.5);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(RX1 - RX0, RY1 - RY0), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.55 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.copy(Bv((RX0 + RX1) / 2, (RY0 + RY1) / 2, 0.001)); G.add(floor); shellAdd(floor);
+  const WALL2 = new THREE.MeshStandardMaterial({ color: 0xece4d6, roughness: 0.8 });
+  const PANEL = new THREE.MeshStandardMaterial({ color: 0x173a2c, roughness: 0.7 });
+  shellAdd(box(RX0 - WT, RX0, RY0 - WT, RY1, 0, RH2, WALL2)); shellAdd(box(RX1, RX1 + WT, RY0 - WT, RY1, 0, RH2, WALL2));
+  shellAdd(box(RX0, RX1, RY0 - WT, RY0, 0, RH2, WALL2));
+  shellAdd(box(RX0, RX1, RY0 - WT, RY1 + WT, RH2, RH2 + 0.05, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.9 })));
+  // lambris verde escuro até 1,0 m e friso dourado
+  const FRISO = new THREE.MeshStandardMaterial({ color: 0xb8923e, metalness: 0.6, roughness: 0.35 });
+  shellAdd(box(RX0, RX0 + 0.02, RY0, RY1, 0, 1.0, PANEL)); shellAdd(box(RX1 - 0.02, RX1, RY0, RY1, 0, 1.0, PANEL)); shellAdd(box(RX0, RX1, RY0, RY0 + 0.02, 0, 1.0, PANEL));
+  shellAdd(box(RX0, RX0 + 0.03, RY0, RY1, 1.0, 1.03, FRISO)); shellAdd(box(RX1 - 0.03, RX1, RY0, RY1, 1.0, 1.03, FRISO)); shellAdd(box(RX0, RX1, RY0, RY0 + 0.03, 1.0, 1.03, FRISO));
+  // lado do Espaço Memória da parede frontal (a parede da sala de dinamização já existe; aqui só o acabamento)
+  shellAdd(box(RX0, DX0 - 0.05, RY1 - 0.02, RY1, 0, 1.0, PANEL)); shellAdd(box(DX1 + 0.05, RX1, RY1 - 0.02, RY1, 0, 1.0, PANEL));
+  const lamp = new THREE.MeshBasicMaterial({ color: 0xfff4dd });
+  for (const [x, y] of [[-3.75, -6.4], [-1.25, -6.4], [-3.75, -8.8], [-1.25, -8.8], [-2.5, -7.6]]) { const o = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 20), lamp); o.position.copy(Bv(x, y, RH2 - 0.01)); G.add(o); }
+  const L1 = new THREE.PointLight(0xffe9c7, 6, 7, 1.6); L1.position.copy(Bv(-2.5, -6.8, 2.8)); G.add(L1);
+  const L2 = new THREE.PointLight(0xffe9c7, 6, 7, 1.6); L2.position.copy(Bv(-2.5, -9.0, 2.8)); G.add(L2);
+  // ---- quadros (história – fontes públicas: gruporealbr.com.br, cmrsaude.com.br, Campo Grande News, O Presente Rural)
+  function icon(g, kind, x, y, s) {
+    g.save(); g.translate(x, y); g.scale(s, s); g.fillStyle = VERDE; g.strokeStyle = VERDE; g.lineWidth = 6;
+    if (kind === 'loja') { g.fillRect(-60, -10, 120, 70); g.beginPath(); g.moveTo(-75, -10); g.lineTo(0, -60); g.lineTo(75, -10); g.fill(); g.fillStyle = CREME; g.fillRect(-15, 20, 30, 40); g.fillRect(-50, 5, 25, 20); g.fillRect(25, 5, 25, 20); }
+    else if (kind === 'boi') { g.beginPath(); g.ellipse(0, 10, 62, 34, 0, 0, 7); g.fill(); g.fillRect(-50, 30, 12, 40); g.fillRect(-20, 30, 12, 40); g.fillRect(18, 30, 12, 40); g.fillRect(44, 30, 12, 40);
+      g.beginPath(); g.ellipse(70, -12, 22, 18, 0.3, 0, 7); g.fill(); g.beginPath(); g.moveTo(60, -28); g.lineTo(52, -48); g.lineTo(70, -30); g.fill(); g.beginPath(); g.moveTo(80, -26); g.lineTo(92, -44); g.lineTo(86, -24); g.fill(); }
+    else if (kind === 'frasco') { g.fillRect(-26, -20, 52, 80); g.fillRect(-12, -44, 24, 26); g.fillStyle = CREME; g.fillRect(-18, 0, 36, 30); g.fillStyle = DOURADO; g.beginPath(); g.arc(0, -60, 10, 0, 7); g.fill(); }
+    else if (kind === 'fabrica') { g.fillRect(-80, 0, 160, 60); g.beginPath(); g.moveTo(-80, 0); g.lineTo(-40, -30); g.lineTo(-40, 0); g.lineTo(0, -30); g.lineTo(0, 0); g.lineTo(40, -30); g.lineTo(40, 0); g.fill(); g.fillRect(52, -70, 18, 70); g.fillStyle = '#aab'; g.beginPath(); g.arc(66, -86, 14, 0, 7); g.arc(82, -100, 10, 0, 7); g.fill(); }
+    else if (kind === 'pata') { g.beginPath(); g.ellipse(0, 22, 34, 28, 0, 0, 7); g.fill(); for (const [a, b] of [[-38, -18], [-14, -36], [14, -36], [38, -18]]) { g.beginPath(); g.ellipse(a, b, 13, 17, 0, 0, 7); g.fill(); } }
+    else if (kind === 'globo') { g.beginPath(); g.arc(0, 0, 60, 0, 7); g.stroke(); g.beginPath(); g.ellipse(0, 0, 26, 60, 0, 0, 7); g.stroke(); g.beginPath(); g.moveTo(-60, 0); g.lineTo(60, 0); g.moveTo(-52, -30); g.lineTo(52, -30); g.moveTo(-52, 30); g.lineTo(52, 30); g.stroke(); }
+    else if (kind === 'cmr') { g.font = 'bold 110px Georgia,serif'; g.textAlign = 'center'; g.fillText('CMR', 0, 30); g.fillStyle = DOURADO; g.fillRect(-110, 48, 220, 8); }
+    else if (kind === 'hoje') { for (let i = 0; i < 5; i++) g.fillRect(-80 + i * 34, 40 - i * 22, 24, 22 + i * 22); }
+    g.restore();
+  }
+  function quadro(ano, titulo, texto, ic, w = 0.9, h = 0.68) {
+    const tex = canvasTex(1024, 776, (g, W, H) => {
+      g.fillStyle = CREME; g.fillRect(0, 0, W, H); g.fillStyle = VERDE; g.fillRect(0, 0, W, 16); g.fillRect(0, H - 16, W, 16);
+      icon(g, ic, 190, 250, 1.35);
+      g.fillStyle = DOURADO; g.font = 'bold 120px Georgia,serif'; g.textAlign = 'left'; g.fillText(ano, 370, 170);
+      g.fillStyle = TINTA; g.font = 'bold 48px Georgia,serif'; wrap(g, titulo, 370, 245, 610, 56);
+      g.font = '36px Georgia,serif'; g.fillStyle = '#34453c'; wrap(g, texto, 60, 470, 904, 46);
+    });
+    const grp = new THREE.Group();
+    const FR = new THREE.MeshStandardMaterial({ color: 0x3b2413, roughness: 0.5 });
+    const fr = (x0, x1, y0, y1) => { const o = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, 0.04), FR); o.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.01); grp.add(o); };
+    fr(-w / 2 - 0.05, w / 2 + 0.05, h / 2, h / 2 + 0.05); fr(-w / 2 - 0.05, w / 2 + 0.05, -h / 2 - 0.05, -h / 2); fr(-w / 2 - 0.05, -w / 2, -h / 2, h / 2); fr(w / 2, w / 2 + 0.05, -h / 2, h / 2);
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 })); p.position.z = 0.012; grp.add(p);
+    return grp;
+  }
+  const frames = [
+    // parede oeste (x = -5), olhando para +x
+    ['1985', 'Início em Ribas do Rio Pardo (MS)', 'Em fevereiro de 1985 a família Real abre uma pequena loja de produtos veterinários, em meio a uma crise de mortalidade no rebanho da região.', 'loja', 'O', -6.2],
+    ['1987', 'Nasce a Homeopatia Populacional', 'O Prof. Dr. Claudio Martins Real estuda a mortalidade do gado em MS (1986) e concebe o método: a homeopatia, individual e curativa, torna-se coletiva e preventiva.', 'boi', 'O', -7.35],
+    ['1989', 'Fábrica de Sal Mineralizado Real', 'Inauguração da fábrica e início dos trabalhos experimentais de longa duração: nutrição e saúde animal caminhando juntas.', 'fabrica', 'O', -8.5],
+    ['2009', 'Linha Homeopet', 'A experiência chega aos animais de companhia: produtos homeopáticos para cães e gatos.', 'pata', 'O', -9.45],
+    // parede leste (x = 0), olhando para -x
+    ['2019', 'Além das fronteiras', 'Ampliação das exportações para Bolívia e Guatemala; presença também no Paraguai, México e Colômbia.', 'globo', 'L', -9.45],
+    ['2023', 'Nasce a marca CMR Saúde', 'Apresentada na Expogrande 2023, a CMR — Claudio Martins Real — reúne as linhas de saúde para animais de produção.', 'cmr', 'L', -8.5],
+    ['Hoje', 'Grupo Real: Real H · CMR Saúde · Homeopet', 'Sede em Campo Grande (75 mil m²), fábrica em Cuiabá, centros de distribuição, mais de 330 profissionais e produtos em mais de 15 milhões de bovinos.', 'hoje', 'L', -7.35],
+    ['Lab.', 'Maior laboratório de homeopatia veterinária da América Latina', 'Pesquisa, produção e dinamização: é aqui que nasce a necessidade das dinamizadoras CMR que você acabou de operar.', 'frasco', 'L', -6.2],
+  ];
+  for (const [ano, tit, tx, ic, lado, y] of frames) {
+    const q = quadro(ano, tit, tx, ic);
+    if (lado === 'O') { q.position.copy(Bv(RX0 + 0.03, y, 1.75)); q.rotation.y = Math.PI / 2; } else { q.position.copy(Bv(RX1 - 0.03, y, 1.75)); q.rotation.y = -Math.PI / 2; }
+    G.add(q);
+  }
+  // parede do fundo (y = -10): título + fundador
+  const titulo = canvasTex(2048, 512, (g, w, h) => { g.fillStyle = VERDE; g.fillRect(0, 0, w, h); g.strokeStyle = DOURADO; g.lineWidth = 14; g.strokeRect(24, 24, w - 48, h - 48);
+    g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 150px Georgia,serif'; g.fillText('GRUPO REAL', w / 2, 210); g.fillStyle = DOURADO; g.font = '76px Georgia,serif';
+    g.fillText('Real H  ·  CMR Saúde  ·  Homeopet', w / 2, 320); g.fillStyle = '#e8efe9'; g.font = 'italic 54px Georgia,serif'; g.fillText('Nutrição e saúde animal desde 1985 · Campo Grande – MS', w / 2, 420); });
+  plane(3.0, 0.75, titulo, Bv(-2.5, RY0 + 0.01, 2.55), Math.PI);
+  const fund = canvasTex(1024, 1024, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#d9cfbd'; g.beginPath(); g.arc(w / 2, 330, 190, 0, 7); g.fill(); g.fillStyle = VERDE; g.beginPath(); g.arc(w / 2, 300, 105, 0, 7); g.fill(); g.beginPath(); g.ellipse(w / 2, 520, 190, 120, 0, Math.PI, 0); g.fill();
+    g.textAlign = 'center'; g.fillStyle = TINTA; g.font = 'bold 60px Georgia,serif'; g.fillText('Prof. Dr. Claudio Martins Real', w / 2, 650);
+    g.fillStyle = DOURADO; g.font = '44px Georgia,serif'; g.fillText('Médico-veterinário · fundador e presidente', w / 2, 715);
+    g.fillStyle = '#34453c'; g.font = 'italic 40px Georgia,serif'; wrap(g, 'Pioneiro da homeopatia populacional. A sigla CMR homenageia o seu nome.', w / 2, 800, 860, 50);
+    g.font = '28px Georgia,serif'; g.fillStyle = '#6b746e'; g.fillText('(ilustração)', w / 2, 960); });
+  const qf = new THREE.Group(); const FR2 = new THREE.MeshStandardMaterial({ color: 0x3b2413, roughness: 0.5 });
+  const fb = new THREE.Mesh(new THREE.BoxGeometry(1.08, 1.08, 0.04), FR2); qf.add(fb);
+  const fp = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.98), new THREE.MeshStandardMaterial({ map: fund, roughness: 0.8 })); fp.position.z = 0.022; qf.add(fp);
+  qf.position.copy(Bv(-2.5, RY0 + 0.03, 1.45)); qf.rotation.y = Math.PI; G.add(qf);
+  const fonte = canvasTex(1024, 128, (g, w, h) => { g.fillStyle = '#173a2c'; g.fillRect(0, 0, w, h); g.fillStyle = '#cfd9d2'; g.font = '26px system-ui'; g.textAlign = 'center';
+    g.fillText('Fontes públicas: gruporealbr.com.br · cmrsaude.com.br · Campo Grande News · O Presente Rural', w / 2, 52);
+    g.fillText('Embalagens e ilustrações meramente ilustrativas — consulte o catálogo oficial', w / 2, 96); });
+  plane(0.9, 0.11, fonte, Bv(-1.2, RY0 + 0.012, 0.85), Math.PI);
+  // ---- vitrine de produtos (2 balcões, 4 produtos cada)
+  const PRODUTOS = [
+    { nome: 'CMR VET', sub: 'Pomada cicatrizante homeopática', ind: 'Ferimentos e cicatrização', fmt: 'pote', cor: '#0f5132' },
+    { nome: 'Homeopet', sub: 'Pomada para cães e gatos', ind: 'Cuidados da pele e feridas em pets', fmt: 'bisnaga', cor: '#1f6fb2' },
+    { nome: 'Carrapat 100', sub: 'Homeopatia populacional', ind: 'Prevenção e redução de carrapatos', fmt: 'balde', cor: '#7a3e12' },
+    { nome: 'Parasit 100', sub: 'Homeopatia populacional', ind: 'Carrapatos, moscas e vermes', fmt: 'balde', cor: '#5d2d7a' },
+    { nome: 'Sacsom', sub: 'Homeopatia populacional', ind: 'Controle de moscas', fmt: 'saco', cor: '#8a6d12' },
+    { nome: 'Sodo 100', sub: 'Homeopatia populacional', ind: 'Prevenção de distúrbios de comportamento', fmt: 'saco', cor: '#284f7a' },
+    { nome: 'Pró-Cio', sub: 'Homeopatia populacional', ind: 'Fertilidade e reprodução', fmt: 'balde', cor: '#a12a4a' },
+    { nome: 'Dermosan MD', sub: 'Saúde da pele', ind: 'Afecções de pele', fmt: 'frasco', cor: '#2a7a6b' },
+  ];
+  const labelTex = (p) => canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.fillStyle = p.cor; g.fillRect(0, 0, w, 150); g.fillRect(0, h - 70, w, 70);
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 34px system-ui'; g.fillText('CMR SAÚDE ANIMAL', w / 2, 58); g.font = '26px system-ui'; g.fillText(p.nome === 'Homeopet' ? 'Grupo Real' : 'Grupo Real · Real H', w / 2, 108);
+    g.fillStyle = p.cor; let px = 76; g.font = `bold ${px}px system-ui`; while (g.measureText(p.nome).width > 470) { px -= 4; g.font = `bold ${px}px system-ui`; } g.fillText(p.nome, w / 2, 250);
+    g.fillStyle = '#333'; g.font = '30px system-ui'; wrap(g, p.sub, w / 2, 310, 460, 36); g.font = 'italic 26px system-ui'; g.fillStyle = '#666'; g.fillText('embalagem ilustrativa', w / 2, h - 25); });
+  const cardTex = (p) => canvasTex(512, 200, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h); g.fillStyle = VERDE; g.fillRect(0, 0, 10, h);
+    g.fillStyle = TINTA; g.font = 'bold 40px Georgia,serif'; g.fillText(p.nome, 28, 58); g.font = '28px Georgia,serif'; g.fillStyle = '#34453c'; wrap(g, p.ind, 28, 110, 460, 34); });
+  function pack(p) {
+    const tex = labelTex(p), grp = new THREE.Group();
+    const side = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 }), plain = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.cor), roughness: 0.5 }), white = new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 0.4 });
+    let h = 0.2;
+    if (p.fmt === 'pote') { h = 0.1; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.08, 32), [side, white, white]); b.position.y = 0.04; grp.add(b); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.022, 32), plain); c.position.y = 0.09; grp.add(c); }
+    else if (p.fmt === 'bisnaga') { h = 0.19; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.16, 24), [side, white, white]); b.position.y = 0.1; grp.add(b); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.03, 16), plain); c.position.y = 0.015; grp.add(c); const f = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), white); f.position.y = 0.185; grp.add(f); }
+    else if (p.fmt === 'balde') { h = 0.26; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.095, 0.22, 36, 1, true), side); b.position.y = 0.11; grp.add(b); const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.01, 36), white); bt.position.y = 0.005; grp.add(bt); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.03, 36), plain); c.position.y = 0.235; grp.add(c);
+      const a = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.004, 6, 24, Math.PI), white); a.position.y = 0.25; grp.add(a); }
+    else if (p.fmt === 'saco') { h = 0.3; const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.28, 0.08), [plain, plain, white, white, side, side]); b.position.y = 0.14; grp.add(b); const s = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.03), plain); s.position.y = 0.29; grp.add(s); }
+    else { h = 0.2; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.042, 0.15, 28), [side, white, white]); b.position.y = 0.075; grp.add(b); const n = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.03, 0.03, 20), white); n.position.y = 0.165; grp.add(n); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 20), plain); c.position.y = 0.195; grp.add(c); }
+    grp.rotation.y = Math.PI; grp.userData.h = h; return grp;
+  }
+  const BALC = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.45 }), TOPO = new THREE.MeshStandardMaterial({ color: 0xece6da, roughness: 0.3 });
+  const products = [];
+  const counters = [{ x: -4.45, rot: Math.PI / 2 }, { x: -0.55, rot: -Math.PI / 2 }];
+  PRODUTOS.forEach((p, i) => {
+    const cN = i < 4 ? 0 : 1, C = counters[cN], y = -6.25 - (i % 4) * 1.05;
+    if (i % 4 === 0) {                 // balcão (4 nichos)
+      box(C.x - 0.3, C.x + 0.3, -9.55, -5.9, 0, 0.9, BALC); box(C.x - 0.32, C.x + 0.32, -9.57, -5.88, 0.9, 0.93, TOPO);
+    }
+    const o = pack(p); o.position.copy(Bv(C.x, y, 0.93)); o.rotation.y = C.rot + Math.PI; G.add(o);
+    const card = plane(0.26, 0.1, cardTex(p), Bv(C.x + (cN ? -0.301 : 0.301), y, 0.78), cN ? -Math.PI / 2 : Math.PI / 2);
+    const home = { pos: o.position.clone(), q: o.quaternion.clone(), parent: G };
+    products.push({ obj: o, p, home, card });
+  });
+  // ---- miniatura 1:5 da dinamizadora CMR REV17 no centro
+  const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.75, 40), BALC); ped.position.copy(Bv(-2.5, -7.9, 0.375)); G.add(ped);
+  const pedTop = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.03, 40), TOPO); pedTop.position.copy(Bv(-2.5, -7.9, 0.765)); G.add(pedTop);
+  const mini = gm.scene.clone(true); mini.scale.setScalar(0.2); mini.position.copy(Bv(-2.5 - 0.02, -7.9, 0.78)); G.add(mini);
+  const miniTag = plane(0.5, 0.13, canvasTex(768, 200, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h); g.fillStyle = VERDE; g.textAlign = 'center'; g.font = 'bold 56px Georgia,serif'; g.fillText('Dinamizadora CMR · REV17', w / 2, 88); g.fillStyle = '#34453c'; g.font = '38px Georgia,serif'; g.fillText('miniatura 1:5 · 6 garrafões de 5 L', w / 2, 158); }), Bv(-2.5, -7.43, 0.55), Math.PI);
+  // ---- abrir / fechar a porta
+  let open = 0, target = 0;
+  function toggle() { target = target ? 0 : 1; if (typeof oneShot === 'function' && AC && SND) oneShot(audio.door || scene, target ? SND.dooro : SND.doorc, 0.8, 2); }
+  function update(dt) {
+    open += (target - open) * Math.min(1, dt * 2.5);
+    hinge.rotation.y = 1.6 * (open * open * (3 - 2 * open));      // abre para dentro do Espaço Memória (−y Blender)
+    mini.rotation.y += dt * 0.25;
+    for (const it of products) if (it.spin > 0) { it.spin -= dt; it.obj.rotation.y += dt * 2.5; if (it.spin <= 0) it.obj.quaternion.copy(it.home.q); }
+  }
+  const doorTargets = [leaf];
+  return { G, leaf, hinge, products, mini, toggle, update, doorTargets, isOpen: () => target === 1, bounds: { x0: RX0, x1: RX1, y0: RY0, y1: RY1 },
+    counters: counters.map((c) => ({ x0: c.x - 0.32, x1: c.x + 0.32, y0: -9.57, y1: -5.88, h: 0.93 })) };
+})();
+// Espaço Memória no modo Assistir: clique na porta abre; clique num produto mostra a indicação
+if (!OPMODE) {
+  const rc2 = new THREE.Raycaster(); let d0 = null;
+  const cv2 = renderer.domElement;
+  cv2.addEventListener('pointerdown', (e) => { d0 = { x: e.clientX, y: e.clientY }; });
+  cv2.addEventListener('pointerup', (e) => {
+    if (!d0 || Math.hypot(e.clientX - d0.x, e.clientY - d0.y) > 6) return; d0 = null;
+    rc2.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+    const objs = [SR.leaf, ...SR.products.map((p) => p.obj)];
+    const h = rc2.intersectObjects(objs, true)[0]; if (!h) return;
+    let o = h.object; while (o && o !== SR.leaf && !SR.products.some((p) => p.obj === o)) o = o.parent;
+    if (o === SR.leaf) SR.toggle(); else { const it = SR.products.find((p) => p.obj === o); if (it) it.spin = 2.5; }
+  });
+}
+
 // ------------------------------------------------------------------ MODO OPERAR (etapa 3): você é a operadora
 // Máquina de estados ao vivo (as mesmas fases do roteiro), 4 máquinas com partida escalonada, tempo 3× com "avançar".
 // Interações: IHM (PARTIDA ESCALONADA / INICIAR / CONFIRMAR), portas frente/traseira (intertravadas), bocais P1–P6,
@@ -844,6 +1088,10 @@ if (OPMODE) {
     const C = R.machines[mn].cycles;
     const c = { n: C.length + 1, start, auto, pip: {}, tampas: {}, portas: [] };
     c.fecha = [start + 0.3, start + 0.3 + D.FECHA]; c.dosa = [c.fecha[1], c.fecha[1] + D.DOSA]; c.ready = c.dosa[1];
+    if (OP.IM && ['todas', 'solucao'].includes(OP.IM.cenario) && mn === 'M4' && c.n === 1 && !OP.IM.flags.f_sol) {
+      OP.IM.flags.f_sol = true;      // falha simulada: falta de solução no meio da dosagem
+      c.hold = { t0: c.dosa[0] + 0.5 * D.DOSA, dosaEnd: c.dosa[1] }; c.dosa[1] = Infinity; c.ready = Infinity; OP.IM.faultLog.push({ tipo: 'Falta de solução (M4)', t: c.hold.t0 });
+    }
     C.push(c); segs(mn); ev('ciclo_inicio', { m: mn, n: c.n }); return c;
   }
   function runCycle(mn, c, t) {
@@ -855,11 +1103,22 @@ if (OPMODE) {
   function segs(mn) {
     const out = [];
     for (const c of R.machines[mn].cycles) {
-      out.push([c.fecha[0], c.fecha[1], 2, 6, 0], [c.dosa[0], c.dosa[1], 6, 15.5, 0]);
-      if (c.run === undefined) continue;
+      const o0 = out.length;
+      out.push([c.fecha[0], c.fecha[1], 2, 6, 0]);
+      if (c.hold) { out.push([c.dosa[0], c.hold.t0, 6, 10.75, 0]); if (c.hold.resume !== undefined) out.push([c.hold.resume, c.dosa[1], 10.75, 15.5, 0]); }
+      else out.push([c.dosa[0], c.dosa[1], 6, 15.5, 0]);
+      if (c.run !== undefined) {
       const [m0, m1] = c.mix;
       out.push([c.run, c.run + D.PASSA, 15.5, 23, 0], [m0, m0 + 2, 23, 25, 0], [m0 + 2, m1 - 2, 25, 25 + 8 * NLOOP, 8], [m1 - 2, m1, 33, 35, 0],
         [c.pausa[0], c.pausa[1], 35, 37, 0], [c.dreno[0], c.dreno[1], 37, 47, 0], [c.abre[0], c.abre[1], 47, 51.5, 0]);
+      }
+      if (c.stop !== undefined) {                            // parada / emergência / falha: congela a mecânica no instante da parada
+        let cs = null;
+        for (let i = out.length - 1; i >= o0; i--) { const g_ = out[i]; if (g_[0] >= c.stop) { out.splice(i, 1); continue; }
+          if (cs === null) { const u = Math.min((c.stop - g_[0]) / (g_[1] - g_[0]), 1), cu = g_[2] + u * (g_[3] - g_[2]); cs = g_[4] ? 25 + ((cu - 25) % g_[4]) : cu; } }
+        out.push([c.stop, 1e9, cs === null ? 2 : cs, cs === null ? 2 : cs, 0]);
+        R.events = R.events.filter((e) => !(e.type === 'ciclo_fim' && e.m === mn && e.t > c.stop));
+      }
     }
     R.machines[mn].segments = out;
   }
@@ -875,6 +1134,7 @@ if (OPMODE) {
 
   // ---------------- ações
   function actIHM(mn) {
+    if (OP.IM && OP.IM.ihm(mn)) return;
     const t = st.t, s = state(mn, t), c = cur(mn);
     ev('ihm_toque', { m: mn });
     if (!c && s.k === 'PRONTA') {
@@ -900,17 +1160,19 @@ if (OPMODE) {
       const e = c.portas.find(([l, a, b]) => l === lado && b === Infinity); e[2] = t;
       ev('porta_maq_fecha', { m: mn, lado }); return;
     }
-    if (!['PIPETAR', 'PRONTA', 'CONCLUIDO', 'FIM_CICLO'].includes(s.k)) return say(mn, `Porta ${nome} travada: máquina ${PHASE[s.k] || 'em operação'}`, false, true);
+    if (!['PIPETAR', 'PRONTA', 'CONCLUIDO', 'FIM_CICLO', 'PARADA', 'EMERGENCIA', 'FALHA'].includes(s.k)) return say(mn, `Porta ${nome} travada: máquina ${PHASE[s.k] || 'em operação'}`, false, true);
     if (!c) return say(mn, 'Garrafões já posicionados · inicie pela IHM');
     c.portas.push([lado, t, Infinity]); ev('porta_maq_abre', { m: mn, lado });
   }
   function dispense(mn, k, viaPipeta) {
+    if (OP.IM && OP.IM.dispense(mn, k, viaPipeta)) return;
     const t = st.t, s = state(mn, t), c = cur(mn), key = 'P' + k, lado = k <= 3 ? 'F' : 'T';
     if (s.k !== 'PIPETAR') return say(mn, s.k === 'DOSANDO' || s.k === 'FECHANDO' ? 'Aguarde: máquina ainda dosando' : 'Pipetagem fora da etapa', false, true);
     if (!openSide(c, lado)) return say(mn, `Abra a porta ${lado === 'F' ? 'da frente' : 'traseira'} para pipetar ${key}`, false, true);
     if (c.pip[key] !== undefined) return say(mn, `Dose dupla em ${key}! (já registrado)`, true);
     if (viaPipeta && OP.pip.loaded < 30) return say(mn, 'Pipeta vazia: aspire 30 mL no frasco', true);
     c.tampas[key] = [t, t + (viaPipeta ? 1.4 : 1.2)]; c.pip[key] = t + 0.5; OP.pip.loaded = 0;
+    if (OP.IM) OP.IM.fileteUntil = performance.now() + 700;
     R.events.push({ t: t + 0.5, type: 'pipeta', m: mn, p: k });
     const n = Object.keys(c.pip).length; say(mn, n < 6 ? `${key} registrado pelo sensor (${n}/6)` : '6/6 registrados · feche as portas e toque CONFIRMAR');
   }
@@ -948,6 +1210,7 @@ if (OPMODE) {
   if (lampT) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), hitMat); lampT.getWorldPosition(s.position); world.worldToLocal(s.position); world.add(s); reg(s, { kind: 'transf' }); }
   function label(info) {
     const t = st.t;
+    const L_ = OP.IM && OP.IM.label(info); if (L_) return L_;
     if (info.kind === 'transf') return 'TRANSFERIR TQ-01 → sala de tanques';
     if (info.kind === 'pipeta') return OP.pip.holder ? 'Pipeta na mão' : 'Pegar pipetador + pipeta 50 mL';
     const s = state(info.mn, t), c = cur(info.mn);
@@ -961,6 +1224,7 @@ if (OPMODE) {
     return '';
   }
   function activate(info, how) {
+    if (OP.IM && OP.IM.activate(info, how || {})) return;
     if (info.kind === 'ihm') actIHM(info.mn);
     else if (info.kind === 'porta') actDoor(info.mn, info.lado);
     else if (info.kind === 'transf') actTransfer();
@@ -1041,6 +1305,7 @@ if (OPMODE) {
   OP.xrSqueeze = (e) => { if (OP.pip.holder === e.inputSource) { dropPipette(); return true; } return false; };
   OP.frame = (frame) => {
     let hov = null;
+    if (OP.grabFrame) OP.grabFrame(frame);
     if (frame && OP.pip.holder && pipObj) {                   // pipeta segue a mão (espaço do rig)
       const sp = OP.pip.holder.gripSpace || OP.pip.holder.targetRaySpace, p = frame.getPose(sp, renderer.xr.getReferenceSpace());
       if (p) { pipObj.position.copy(p.transform.position); pipObj.quaternion.copy(p.transform.orientation).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 3)); pipObj.scale.setScalar(1); }
@@ -1087,14 +1352,15 @@ if (OPMODE) {
     } else tspr.visible = false;
   }
   // ---------------- atualização por quadro
-  OP.update = (t) => {
+  OP.update = (t, dt = 0) => {
     for (const mn of MN) {
       const c = cur(mn);
-      if (c && c.end !== undefined && c.n < 2 && t >= c.end + D.RESTART - 0.001) newCycle(mn, c.end + D.RESTART, true);
+      if (c && c.end !== undefined && c.stop === undefined && c.n < 2 && t >= c.end + D.RESTART - 0.001) newCycle(mn, c.end + D.RESTART, true);
     }
     if (nivel) nivel.scale.set(1, Math.max(OP.tankVol(t) / 250, 0.001), 1);
     if (lampT) lampT.scale.setScalar(t >= R.transfer.t && t < R.transfer.t1 ? 1 : 0.001);
-    OP.done = MN.every((mn) => R.machines[mn].cycles.length === 2 && R.machines[mn].cycles[1].end !== undefined && t >= R.machines[mn].cycles[1].end);
+    OP.done = MN.every((mn) => R.machines[mn].cycles.length === 2 && R.machines[mn].cycles[1].end !== undefined && R.machines[mn].cycles[1].stop === undefined && t >= R.machines[mn].cycles[1].end);
+    if (OP.IM) OP.IM.update(t, dt);
     if (!renderer.xr.isPresenting) showTip(OP.hover && label(OP.hover.info), OP.hover && OP.hover.point);
     drawToast();
   };
@@ -1102,6 +1368,7 @@ if (OPMODE) {
   OP.skip = () => {
     const t = st.t; let nx = Infinity;
     for (const mn of MN) for (const c of R.machines[mn].cycles) for (const v of [c.start, c.ready, c.end !== undefined ? c.end + D.RESTART + D.FECHA + D.DOSA + 0.3 : undefined, c.dreno && c.dreno[1]]) if (v !== undefined && v > t + 0.5 && v < nx) nx = v;
+    for (const mn of MN) { const c = cur(mn); if (c && c.hold && c.hold.resume > t + 0.5 && c.hold.resume < nx) nx = c.hold.resume; }
     if (R.transfer.t1 > t + 0.5 && R.transfer.t1 < nx) nx = R.transfer.t1;
     if (nx < Infinity) { st.t = nx - 0.3; for (const m of Object.values(machines)) m.lastStroke = -1; }
   };
@@ -1133,8 +1400,20 @@ if (OPMODE) {
     const list = [...OP.errors.map((e) => ({ ...e, tipo: 'ERRO' })), ...OP.alerts.map((e) => ({ ...e, tipo: 'alerta' }))].sort((a, b) => a.t - b.t).slice(-7);
     g.font = '20px system-ui';
     if (!list.length) { g.fillStyle = '#2fbf71'; g.fillText('Nenhum erro: todos os bocais registrados na primeira tentativa, portas fechadas no CONFIRMAR.', 36, 512); }
-    list.forEach((e, i) => { g.fillStyle = e.tipo === 'ERRO' ? '#ff8a7a' : '#f5b31a'; g.fillText(`${hms(simT(e.t))} · ${e.mn} · ${e.tipo}: ${e.text}`, 36, 512 + i * 30); });
-    if (OP.tankVol(t) > 0.5 && t >= R.transfer.t1) { g.fillStyle = '#19b3c9'; g.font = 'bold 22px system-ui'; g.fillText('Falta: toque TRANSFERIR no painel do TQ-01', 760, 474); }
+    list.forEach((e, i) => { g.fillStyle = e.tipo === 'ERRO' ? '#ff8a7a' : '#f5b31a'; const tx = `${hms(simT(e.t))} · ${e.mn} · ${e.tipo}: ${e.text}`; fitFont(g, tx, 700, 20, 'normal'); g.fillText(tx, 36, 512 + i * 30); });
+    const IM = OP.IM;
+    if (IM) {                                                   // conformidade: EPI, rastreabilidade, falhas tratadas
+      const x0 = 770; g.fillStyle = '#0f1a24'; g.fillRect(x0 - 12, 448, 490, 262);
+      g.fillStyle = '#fff'; g.font = 'bold 22px system-ui'; g.fillText('CONFORMIDADE', x0, 474);
+      const E = IM.epi, ok = (v) => (v ? '✔' : '✘');
+      const L = [[`${ok(E.maos)} Mãos  ${ok(E.luvas)} Luvas  ${ok(E.touca)} Touca/jaleco`, E.maos && E.luvas && E.touca],
+        [`${ok(IM.lote.lido)} Lote do ativo lido no tablet`, !!IM.lote.lido], [`${ok(IM.lote.assinado)} Registro do lote assinado`, !!IM.lote.assinado],
+        [`Cenário de falhas: ${IM.cenario}${IM.aborted.length ? ` · ${IM.aborted.length} ciclo(s) reiniciado(s)` : ''}`, true],
+        ...IM.faultLog.slice(-4).map((f) => [`${hms(simT(f.t))} ${f.tipo}`, !/não/.test(f.tipo)])];
+      if (IM.retirados) L.push([`${IM.retirados} garrafão(ões) retirado(s) para o carrinho`, true]);
+      L.forEach(([tx, good], i) => { g.fillStyle = good ? '#bfe9cf' : '#ff8a7a'; fitFont(g, tx, 466, 19, 'normal'); g.fillText(tx, x0, 506 + i * 27); });
+    }
+    if (OP.tankVol(t) > 0.5 && t >= R.transfer.t1) { g.fillStyle = '#19b3c9'; g.font = 'bold 22px system-ui'; g.fillText('Falta: TRANSFERIR no TQ-01', 480, 474); }
   };
   // ---------------- interface
   $('seek').style.display = 'none';
@@ -1142,13 +1421,502 @@ if (OPMODE) {
   $('play').after(sk);
   const arSk = document.createElement('button'); arSk.textContent = '⏩'; arSk.onclick = () => OP.skip(); $('arbtns').prepend(arSk);
   $('clk').title = 'Modo Operar';
-  window.__op = { OP, actIHM, actDoor, dispense, actTransfer, pick, targets, state };
+  // ================================================================== IMERSÃO (modo Operar)
+  // EPI e rastreabilidade · botões físicos e emergência · falhas simuladas · modo guiado · mãos com luva, toque direto
+  // e vibração · pegar/carregar/encaixar (pipeta, frasco, garrafões, carrinho, produtos do Espaço Memória) · líquido na pipeta
+  const q = new URLSearchParams(location.search);
+  const IM = { cenario: q.get('falhas') || 'nenhuma', guiado: q.get('guiado') !== '0', epi: { maos: false, luvas: false, touca: false }, lote: { lido: false, assinado: false },
+    faultLog: [], aborted: [], emerg: {}, bottles: {}, held: new Map(), flags: {} };
+  OP.IM = IM;
+  const has = (f) => IM.cenario === 'todas' || IM.cenario === f;
+  const Wv = (x, y, z) => { const v = B(x, y, z); return world.localToWorld(v); };           // Blender → mundo
+  const mLocal = (m, x, y, z) => new THREE.Vector3(x, z, -y);                                   // local da máquina (Blender) → local three
+  const once = (key, fn) => { if (!IM.flags[key]) { IM.flags[key] = true; fn(); } };
+  // ---------------- sons extras (criados quando o áudio existir)
+  function sx() {
+    if (!AC || !SND || SND.tampa) return;
+    SND.tampa = buf(0.06, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.004) * rnd() + 0.6 * Math.exp(-t / 0.012) * Math.sin(2 * Math.PI * 2100 * t); } norm(d, 0.7); });
+    SND.encaixe = buf(0.25, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.03) * Math.sin(2 * Math.PI * 180 * t) + 0.4 * Math.exp(-t / 0.006) * rnd() + 0.2 * Math.exp(-t / 0.05) * Math.sin(2 * Math.PI * 1250 * t); } norm(d, 0.9); });
+    SND.vidro = buf(0.9, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.18) * rnd() * (0.6 + 0.4 * Math.sin(2 * Math.PI * 3700 * t)) + 0.3 * Math.exp(-t / 0.08) * Math.sin(2 * Math.PI * 5200 * t * (1 + 0.1 * rnd())); } hp(d, 0.6); norm(d, 0.95); });
+    SND.gel = buf(0.35, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = (t < 0.25 ? 1 : Math.exp(-(t - 0.25) / 0.03)) * rnd() * (0.5 + 0.5 * Math.sin(2 * Math.PI * 12 * t)); } lp(d, 0.25); norm(d, 0.6); });
+    SND.luva = buf(0.4, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.sin(Math.PI * t / 0.4) * rnd() * (0.4 + 0.6 * Math.abs(Math.sin(2 * Math.PI * 9 * t))); } lp(d, 0.5); norm(d, 0.5); });
+    SND.fill = buf(2, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = rnd() * (0.6 + 0.4 * Math.sin(2 * Math.PI * 7 * t)) + 0.25 * Math.sin(2 * Math.PI * (300 + 40 * Math.sin(2 * Math.PI * 3 * t)) * t); } lp(d, 0.18); loopFix(d, sr); norm(d, 0.6); });
+    for (const mn of MN) { const m = machines[mn]; if (m.snd && !m.snd.fill) { m.snd.fill = positional(m.snd.mid, SND.fill, true); m.snd.fill.play(); } }
+  }
+  const snd = (name, pos, vol = 0.8) => { sx(); if (!AC || !SND[name] || !audio.on) return; const o = anchor(world.worldToLocal(pos.clone())); oneShot(o, SND[name], vol, 1.2); setTimeout(() => world.remove(o), 3000); };
+  // ---------------- vibração do controle
+  function buzz(src, a = 0.5, ms = 40) { try { const h = src && src.gamepad && src.gamepad.hapticActuators && src.gamepad.hapticActuators[0]; if (h && h.pulse) h.pulse(a, ms); } catch (e) { } }
+  IM.buzz = buzz;
+  // ---------------- alvos novos: botões físicos, EPI, tablet do lote, porta do Espaço Memória, produtos
+  const hitMat2 = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const sphereAt = (parent, pos, r) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), hitMat2); s.position.copy(pos); parent.add(s); return s; };
+  const BTN = { iniciar: [0.79, -0.63, 1.30], parar: [0.875, -0.63, 1.30], rearme: [0.96, -0.63, 1.30], emerg: [0.93, -0.64, 1.16] };
+  for (const mn of MN) for (const [k, p] of Object.entries(BTN)) reg(sphereAt(machines[mn].root, mLocal(machines[mn], ...p), k === 'emerg' ? 0.035 : 0.022), { kind: 'botao', mn, b: k });
+  reg(sphereAt(world, B(2.825, -4.95, 1.33), 0.1), { kind: 'alcool' });
+  reg(sphereAt(world, B(-2.835, -4.85, 0.95), 0.12), { kind: 'luvas' });
+  // quadro de EPI (checklist) na parede frontal
+  const epiCv = document.createElement('canvas'); epiCv.width = 640; epiCv.height = 512;
+  const epiTex = new THREE.CanvasTexture(epiCv); epiTex.colorSpace = THREE.SRGBColorSpace;
+  const epiP = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.4), new THREE.MeshBasicMaterial({ map: epiTex, toneMapped: false }));
+  epiP.position.copy(B(1.55, -4.985, 1.45)); epiP.rotation.y = Math.PI; world.add(epiP); reg(epiP, { kind: 'epi' });
+  function drawEPI() {
+    const g = epiCv.getContext('2d'), E = IM.epi;
+    g.fillStyle = '#12304a'; g.fillRect(0, 0, 640, 512); g.fillStyle = '#fff'; g.font = 'bold 40px system-ui'; g.fillText('CHECKLIST DE ENTRADA', 30, 62);
+    const it = [['Higienizar as mãos (álcool gel na porta)', E.maos], ['Calçar luvas nitrílicas (caixa na bancada)', E.luvas], ['Touca e jaleco conferidos (toque aqui)', E.touca]];
+    it.forEach(([t, ok], i) => { const y = 140 + i * 110; g.fillStyle = ok ? '#2fbf71' : '#3a4854'; g.fillRect(30, y - 44, 60, 60); g.fillStyle = '#fff'; g.font = 'bold 44px system-ui'; if (ok) g.fillText('✔', 42, y);
+      g.font = '28px system-ui'; g.fillStyle = ok ? '#bfe9cf' : '#e8eef3'; wrap2(g, t, 110, y - 16, 500, 34); });
+    g.fillStyle = IM.epi.maos && IM.epi.luvas && IM.epi.touca ? '#2fbf71' : '#f5b31a'; g.font = 'bold 30px system-ui';
+    g.fillText(IM.epi.maos && IM.epi.luvas && IM.epi.touca ? 'Liberado para operar' : 'Complete antes de operar', 30, 482); epiTex.needsUpdate = true;
+  }
+  function wrap2(g, text, x, y, maxW, lh) { const ws = text.split(' '); let l = ''; for (const w of ws) { const t = l ? l + ' ' + w : w; if (g.measureText(t).width > maxW && l) { g.fillText(l, x, y); y += lh; l = w; } else l = t; } g.fillText(l, x, y); }
+  // tablet do registro de lote (sobre a mesa inox perto da bancada)
+  const tabCv = document.createElement('canvas'); tabCv.width = 512; tabCv.height = 352;
+  const tabTex = new THREE.CanvasTexture(tabCv); tabTex.colorSpace = THREE.SRGBColorSpace;
+  const tab = new THREE.Group(); tab.position.copy(B(0.0, -3.95, 0.905)); world.add(tab);
+  const tb = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.012, 0.17), new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.4 })); tab.add(tb);
+  const ts = new THREE.Mesh(new THREE.PlaneGeometry(0.235, 0.16), new THREE.MeshBasicMaterial({ map: tabTex, toneMapped: false })); ts.rotation.x = -Math.PI / 2; ts.position.y = 0.0065; tab.add(ts);
+  tab.rotation.set(0, 0, 0); tb.rotation.x = ts.rotation.x = 0; tab.rotation.x = -1.15; tab.position.y += 0.08; ts.rotation.x = 0; ts.position.set(0, 0, 0.0065); tb.geometry = new THREE.BoxGeometry(0.25, 0.17, 0.012);
+  const stand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.012, 0.12), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.6, roughness: 0.4 })); stand.position.copy(B(0.0, -3.9, 0.906)); world.add(stand);
+  reg(tab, { kind: 'tablet' });
+  function drawTab() {
+    const g = tabCv.getContext('2d'); g.fillStyle = '#0e1a26'; g.fillRect(0, 0, 512, 352); g.fillStyle = '#0f5132'; g.fillRect(0, 0, 512, 46);
+    g.fillStyle = '#fff'; g.font = 'bold 24px system-ui'; g.fillText('REGISTRO DE LOTE · SALA 01', 14, 31);
+    const L = IM.lote; g.font = '20px system-ui';
+    g.fillStyle = L.lido ? '#2fbf71' : '#f5b31a'; g.fillText(L.lido ? '✔ Ativo lido: TINTURA-MÃE · lote 26-0925 · val. 09/2027' : '1) Leia o lote do frasco (toque aqui ou aproxime o frasco)', 14, 90);
+    g.fillStyle = '#cfe0ee'; g.fillText('Solução hidroalcoólica 20 % · 21,6 L/ciclo · 30 mL/garrafão', 14, 130);
+    const P = production(st.t); g.fillText(`Ciclos concluídos: ${P.done.length}/8 · produzido ${P.vol.toFixed(1).replace('.', ',')} L`, 14, 170);
+    g.fillStyle = L.assinado ? '#2fbf71' : (OP.done ? '#f5b31a' : '#6b7c8a');
+    g.fillText(L.assinado ? `✔ Registro assinado às ${hms(simT(L.assinado))}` : OP.done ? '2) Assine o registro do lote (toque aqui)' : '2) Assinatura liberada ao fim dos 8 ciclos', 14, 215);
+    if (L.assinado) { g.strokeStyle = '#9fd0ff'; g.lineWidth = 3; g.beginPath(); for (let x = 0; x < 200; x += 4) g.lineTo(260 + x, 290 + 14 * Math.sin(x / 13) * Math.cos(x / 31)); g.stroke(); }
+    tabTex.needsUpdate = true;
+  }
+  // Espaço Memória: porta e produtos
+  reg(SR.leaf, { kind: 'memoria' });
+  SR.products.forEach((it, i) => reg(it.obj, { kind: 'produto', i }));
+  // ---------------- mãos (luva nitrílica azul depois de calçar; pele antes)
+  const SKIN = 0xd9a88a, GLOVE = 0x3f7fd6;
+  const handMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.55 });
+  function refreshHands() { handMat.color.set(IM.epi.luvas ? GLOVE : SKIN); }
+  const jointGeo = new THREE.SphereGeometry(1, 10, 8);
+  const hands = [0, 1].map((i) => { const h = renderer.xr.getHand(i); rig.add(h); h.userData.src = null; h.addEventListener('connected', (e) => { h.userData.src = e.data; }); h.addEventListener('disconnected', () => { h.userData.src = null; }); return h; });
+  function gloveModel() {
+    const g = new THREE.Group();
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.025, 0.085), handMat); palm.position.set(0, -0.01, 0.03); g.add(palm);
+    for (let k = 0; k < 4; k++) { const f = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.05, 4, 8), handMat); f.rotation.x = Math.PI / 2 + 0.5; f.position.set(-0.027 + k * 0.018, -0.03, -0.03); g.add(f); }
+    const th = new THREE.Mesh(new THREE.CapsuleGeometry(0.01, 0.04, 4, 8), handMat); th.rotation.set(Math.PI / 2, 0, -0.9); th.position.set(-0.045, 0.0, 0.0); g.add(th);
+    return g;
+  }
+  const grips = [0, 1].map((i) => { const g = renderer.xr.getControllerGrip(i); g.add(gloveModel()); rig.add(g); g.addEventListener('connected', (e) => { g.userData.src = e.data; g.children[0].visible = !e.data.hand; }); return g; });
+  function updateHandJoints() {
+    for (const h of hands) {
+      if (!h.userData.src || !h.joints) continue;
+      for (const [name, j] of Object.entries(h.joints)) {
+        if (!j.userData.m) { const m = new THREE.Mesh(jointGeo, handMat); j.add(m); j.userData.m = m; }
+        const r = Math.max(j.jointRadius || 0.008, 0.006); j.userData.m.scale.setScalar(r * (name.includes('tip') ? 1.0 : 1.15));
+      }
+    }
+  }
+  function fingerTips() {                                    // pontas de dedo para o toque direto
+    const out = [];
+    for (const h of hands) { const s = h.userData.src; if (s && h.joints && h.joints['index-finger-tip'] && h.joints['index-finger-tip'].visible !== false) out.push({ src: s, p: h.joints['index-finger-tip'].getWorldPosition(new THREE.Vector3()) }); }
+    for (const g of grips) { const s = g.userData.src; if (s && !s.hand && g.visible) out.push({ src: s, p: g.localToWorld(new THREE.Vector3(-0.005, -0.03, -0.075)) }); }
+    return out;
+  }
+  // ---------------- toque direto (poke) com o dedo / ponta da luva
+  const POKE = new Set(['ihm', 'botao', 'porta', 'transf', 'memoria', 'alcool', 'luvas', 'epi', 'tablet']);
+  const pokeCool = new Map(); const _b = new THREE.Box3();
+  function pokeCheck() {
+    const tips = fingerTips(); if (!tips.length) return;
+    const now = performance.now();
+    for (const t of targets) {
+      const info = t.userData.op; if (!info || !POKE.has(info.kind)) continue;
+      _b.setFromObject(t); if (_b.isEmpty()) continue; _b.expandByScalar(info.kind === 'porta' || info.kind === 'memoria' ? 0.004 : 0.012);
+      for (const tp of tips) if (_b.containsPoint(tp.p)) {
+        if ((pokeCool.get(t) || 0) > now) continue;
+        pokeCool.set(t, now + 900); buzz(tp.src, 0.6, 35); activate(info, { src: tp.src, poke: true });
+      }
+    }
+  }
+  // ---------------- pegar / carregar / encaixar
+  const grabs = [];                   // {obj, kind, mn?, k?, home:{parent,pos,q}, slot?}
+  const addGrab = (obj, kind, extra = {}) => { const g = { obj, kind, home: { parent: obj.parent, pos: obj.position.clone(), q: obj.quaternion.clone() }, ...extra }; grabs.push(g); obj.userData.grab = g; return g; };
+  if (flaskObj) addGrab(flaskObj, 'frasco');
+  SR.products.forEach((it, i) => addGrab(it.obj, 'produto', { i }));
+  // garrafões: vaga = posição de repouso no copo cônico de cada máquina
+  const _pg = machines.M1.root.getObjectByName('GARRAFAO_G1'), protos = [_pg.clone(true), _pg.clone(true)];    // cópia limpa (antes de receber userData circular)
+  const slots = [];                   // {pos (mundo, recalculada), parent, localPos, q, occupant, kind:'maq'|'carrinho', mn?, k?}
+  for (const mn of MN) {
+    IM.bottles[mn] = {};
+    for (let k = 1; k <= 6; k++) {
+      const b = machines[mn].root.getObjectByName('GARRAFAO_G' + k); if (!b) continue;
+      const g = addGrab(b, 'garrafao', { mn, k, cracked: false });
+      const sl = { kind: 'maq', mn, k, parent: b.parent, localPos: b.position.clone(), q: b.quaternion.clone(), occupant: g }; slots.push(sl); g.slot = sl; IM.bottles[mn][k] = true;
+      b.traverse((o) => { if (o.isMesh) o.userData.grabRoot = b; });
+    }
+  }
+  // carrinho inox com rodízios (12 vagas: 6 em cima, 6 embaixo) + 2 garrafões reserva
+  const cart = new THREE.Group(); cart.position.copy(B(1.25, -2.3, 0)); cart.rotation.y = Math.PI / 2; world.add(cart);
+  const CI = new THREE.MeshStandardMaterial({ color: 0xc3c7cb, metalness: 0.85, roughness: 0.3 }), PRETO = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+  const cb = (w, h, d, x, y, z, m = CI) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); cart.add(o); return o; };
+  cb(1.0, 0.02, 0.6, 0, 0.36, 0); cb(1.0, 0.02, 0.6, 0, 0.86, 0);
+  for (const [x, z] of [[-0.48, -0.28], [0.48, -0.28], [-0.48, 0.28], [0.48, 0.28]]) { cb(0.03, 0.8, 0.03, x, 0.5, z); const w = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 18), PRETO); w.rotation.x = Math.PI / 2; w.position.set(x, 0.05, z); cart.add(w); }
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.56, 12), CI); handle.rotation.x = Math.PI / 2; handle.position.set(0.56, 1.0, 0); cart.add(handle);
+  cb(0.06, 0.02, 0.02, 0.53, 0.97, -0.27); cb(0.06, 0.02, 0.02, 0.53, 0.97, 0.27); cb(0.02, 0.12, 0.02, 0.5, 0.92, -0.27); cb(0.02, 0.12, 0.02, 0.5, 0.92, 0.27);
+  const tagCv = document.createElement('canvas'); tagCv.width = 512; tagCv.height = 128; { const g = tagCv.getContext('2d'); g.fillStyle = '#12304a'; g.fillRect(0, 0, 512, 128); g.fillStyle = '#fff'; g.font = 'bold 44px system-ui'; g.textAlign = 'center'; g.fillText('CARRINHO DE GARRAFÕES', 256, 60); g.font = '30px system-ui'; g.fillText('em cima: retirados · embaixo: reserva', 256, 104); }
+  const tagT = new THREE.CanvasTexture(tagCv); tagT.colorSpace = THREE.SRGBColorSpace;
+  const tagP = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.125), new THREE.MeshBasicMaterial({ map: tagT, toneMapped: false })); tagP.position.set(0, 0.62, 0.302); cart.add(tagP);
+  for (let r = 0; r < 2; r++) for (let i = 0; i < 6; i++) {
+    const lp_ = new THREE.Vector3(-0.3 + (i % 3) * 0.3, r ? 0.37 : 0.87, i < 3 ? -0.15 : 0.15);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.006, 6, 24), CI); ring.rotation.x = Math.PI / 2; ring.position.copy(lp_).add(new THREE.Vector3(0, 0.012, 0)); cart.add(ring);
+    slots.push({ kind: 'carrinho', parent: cart, localPos: lp_.clone(), q: new THREE.Quaternion(), occupant: null, row: r });
+  }
+  // garrafões reserva: cópia do garrafão da máquina (sem solução)
+  for (let i = 0; i < 2; i++) {
+    const c = protos[i]; c.traverse((o) => { if (/solucao|nivel/i.test(o.name)) o.visible = false; });
+    const sl = slots.filter((s) => s.kind === 'carrinho' && s.row === 1)[i];
+    c.position.copy(sl.localPos); cart.add(c);
+    const g = addGrab(c, 'garrafao', { mn: null, k: null, reserva: true }); g.slot = sl; sl.occupant = g; c.traverse((o) => { if (o.isMesh) o.userData.grabRoot = c; });
+  }
+  const cartGrab = addGrab(cart, 'carrinho'); handle.userData.grabRoot = cart;
+  cart.traverse((o) => { if (o.isMesh && !o.userData.grabRoot) o.userData.grabRoot = cart; });
+  for (const g of grabs) if (g.kind === 'garrafao') g.obj.traverse((o) => { if (o.isMesh) o.userData.grabRoot = g.obj; });
+  reg(cart, { kind: 'carrinho' });
+  grabs.filter((g) => g.kind === 'garrafao').forEach((g) => reg(g.obj, { kind: 'garrafao', g }));
+  // superfícies para apoiar objetos soltos (Blender xy + altura)
+  const SURF = [[-0.35, 1.25, -4.3, -3.6, 0.90], [-0.8, 0.8, 2.4, 3.1, 0.90], [-3.0, -0.9, -5.0, -4.3, 0.90], [-2.0, 2.0, 4.3, 5.0, 0.90], ...SR.counters.map((c) => [c.x0, c.x1, c.y0, c.y1, c.h])];
+  function surfaceBelow(pw) {
+    const l = world.worldToLocal(pw.clone()); const bx = l.x, by = -l.z; let h = 0;
+    for (const [x0, x1, y0, y1, z] of SURF) if (bx > x0 && bx < x1 && by > y0 && by < y1 && l.y >= z - 0.05) h = Math.max(h, z);
+    // topo do carrinho
+    const cl = cart.worldToLocal(pw.clone()); if (Math.abs(cl.x) < 0.5 && Math.abs(cl.z) < 0.3 && cl.y > 0.3) h = Math.max(h, cl.y > 0.8 ? 0.88 : 0.38);
+    return h;
+  }
+  const canTakeBottle = (g) => {
+    if (g.reserva || !g.slot || g.slot.kind !== 'maq') return true;
+    const s = state(g.mn, st.t), c = cur(g.mn);
+    if (!['PRONTA', 'CONCLUIDO', 'PARADA', 'EMERGENCIA', 'FALHA'].includes(s.k)) return false;
+    return !!(c ? openSide(c, g.k <= 3 ? 'F' : 'T') : false) || !c;
+  };
+  function takeFromSlot(g) { if (g.slot) { g.slot.occupant = null; if (g.slot.kind === 'maq') IM.bottles[g.slot.mn][g.slot.k] = false; g.slot = null; } }
+  function putInSlot(g, sl) {
+    g.slot = sl; sl.occupant = g; sl.parent.add(g.obj); g.obj.position.copy(sl.localPos); g.obj.quaternion.copy(sl.q); g.obj.scale.setScalar(1);
+    if (sl.kind === 'maq') { IM.bottles[sl.mn][sl.k] = true; if (g.cracked) say(sl.mn, `Garrafão trincado recolocado em G${sl.k}!`, true); }
+    snd('encaixe', g.obj.getWorldPosition(new THREE.Vector3()), 0.9);
+  }
+  const slotWorld = (sl) => sl.parent.localToWorld(sl.localPos.clone());
+  function freeSlot(kind, near, filter = () => true) {
+    let best = null; for (const sl of slots) { if (sl.occupant || sl.kind !== kind || !filter(sl)) continue; const d = near ? slotWorld(sl).distanceTo(near) : 0; if (!best || d < best.d) best = { sl, d }; }
+    return best && best.sl;
+  }
+  // animação curta de mover objeto (celular/PC)
+  const tweens = [];
+  function tweenTo(g, sl, dur = 0.8) {
+    const o = g.obj, from = o.getWorldPosition(new THREE.Vector3()); takeFromSlot(g); rig.attach(o);
+    tweens.push({ g, sl, from, t: 0, dur });
+  }
+  // pegar com o controle / mão (grip = pegar e soltar; gatilho na pipeta continua funcionando)
+  const holdOf = new Map();          // src -> {g, off: Matrix4, lag}
+  function gripMatrix(src, frame) {
+    const sp = src.gripSpace || src.targetRaySpace; const p = frame && frame.getPose(sp, renderer.xr.getReferenceSpace()); if (!p) return null;
+    const m = new THREE.Matrix4().compose(new THREE.Vector3().copy(p.transform.position), new THREE.Quaternion().copy(p.transform.orientation), new THREE.Vector3(1, 1, 1));
+    return new THREE.Matrix4().multiplyMatrices(rig.matrixWorld, m);
+  }
+  function tryGrab(src, frame) {
+    const M = gripMatrix(src, frame); if (!M) return false;
+    const gp = new THREE.Vector3().setFromMatrixPosition(M);
+    let best = null;
+    for (const g of grabs) {
+      if (g.kind === 'produto' && !SR.isOpen()) continue;
+      const c = new THREE.Box3().setFromObject(g.obj); const d = c.distanceToPoint(gp);
+      if (d < 0.1 && (!best || d < best.d)) best = { g, d };
+    }
+    if (!best) {                                        // pega à distância pelo raio (até 3 m)
+      const c = ctrlFor(src); if (c) { const [o, d] = ctrlRay(c); rc.set(o, d); rc.far = 3; const hs = rc.intersectObjects(grabs.map((g) => g.obj), true);
+        for (const h of hs) { let ob = h.object; while (ob && !ob.userData.grab) ob = ob.parent; if (ob && !(ob.userData.grab.kind === 'produto' && !SR.isOpen())) { best = { g: ob.userData.grab, d: h.distance, far: true }; break; } } }
+    }
+    if (!best) return false;
+    const g = best.g;
+    if (g.kind === 'garrafao' && !canTakeBottle(g)) { say(g.mn || '', 'Garrafão preso: cabeçote fechado ou porta travada', false, true); buzz(src, 0.2, 80); return true; }
+    if (g.kind === 'frasco' && OP.pip.holder === src) return false;
+    const other = [...holdOf.values()].find((h) => h.g === g);
+    takeFromSlot(g);
+    const objW = g.obj.matrixWorld.clone();
+    if (best.far && g.kind !== 'carrinho') { const pos = gp.clone().add(new THREE.Vector3(0, -0.05, 0)); objW.setPosition(g.kind === 'garrafao' ? pos.add(new THREE.Vector3(0, -0.12, 0)) : pos); }
+    if (g.kind !== 'carrinho' && g.obj.parent !== rig) rig.attach(g.obj);
+    holdOf.set(src, { g, off: new THREE.Matrix4().multiplyMatrices(M.clone().invert(), objW), two: !!other });
+    if (g.kind === 'garrafao' && g.mn && !g.reserva) { const s = state(g.mn, st.t); if (s.k === 'CONCLUIDO') IM.retirados = (IM.retirados || 0) + (other ? 0 : 1); }
+    buzz(src, 0.4, 30); return true;
+  }
+  const falls = [];
+  function release(src) {
+    const H = holdOf.get(src); if (!H) return false; holdOf.delete(src);
+    const g = H.g; if ([...holdOf.values()].some((h) => h.g === g)) return true;        // a outra mão ainda segura
+    const pw = g.obj.getWorldPosition(new THREE.Vector3());
+    if (g.kind === 'carrinho') return true;
+    if (g.kind === 'produto') { tweens.push({ g, home: true, from: pw, t: 0, dur: 0.6 }); return true; }
+    if (g.kind === 'garrafao') {
+      let best = null; for (const sl of slots) { if (sl.occupant) continue; if (sl.kind === 'maq' && (g.reserva ? false : sl.mn !== g.mn) && !(g.reserva && IM.bottles[sl.mn] && sl.mn)) continue;
+        const d = slotWorld(sl).distanceTo(pw); if (d < 0.16 && (!best || d < best.d)) best = { sl, d }; }
+      if (best) { putInSlot(g, best.sl); buzz(src, 0.8, 60); return true; }
+    }
+    // solta: cai até a superfície abaixo
+    falls.push({ g, v: 0, y0: pw.y }); return true;
+  }
+  OP.grabFrame = (frame) => {
+    for (const [src, H] of holdOf) {
+      const M = gripMatrix(src, frame); if (!M) continue;
+      const want = new THREE.Matrix4().multiplyMatrices(M, H.off);
+      const two = [...holdOf.values()].filter((h) => h.g === H.g).length > 1;
+      if (H.g.kind === 'carrinho') {                      // empurra: segue a mão no plano do piso
+        const p = new THREE.Vector3().setFromMatrixPosition(want); const lp_ = world.worldToLocal(p); H.g.obj.position.x += (lp_.x - H.g.obj.position.x) * 0.25; H.g.obj.position.z += (lp_.z - H.g.obj.position.z) * 0.25;
+        continue;
+      }
+      const o = H.g.obj; const tp = new THREE.Vector3(), tq = new THREE.Quaternion(), ts_ = new THREE.Vector3(); want.decompose(tp, tq, ts_);
+      const pl = rig.worldToLocal(tp.clone());
+      const lag = H.g.kind === 'garrafao' ? (two ? 0.5 : 0.22) : 1;             // peso: com uma mão ele "atrasa"
+      if (two && H !== [...holdOf.values()].find((h) => h.g === H.g)) continue;
+      o.position.lerp(pl, lag); o.quaternion.slerp(tq, H.g.kind === 'garrafao' ? 0.3 : 1);
+    }
+    return holdOf.size > 0;
+  };
+  OP.xrSqueezeStart = (e) => { if (OP.pip.holder === e.inputSource) { dropPipette(); return true; } return tryGrab(e.inputSource, e.frame); };
+  OP.xrSqueezeEnd = (e) => release(e.inputSource);
+  function stepTweens(dt) {
+    for (let i = tweens.length - 1; i >= 0; i--) {
+      const T = tweens[i]; T.t += dt; const u = Math.min(T.t / T.dur, 1), e = u * u * (3 - 2 * u);
+      const to = T.home ? T.g.home.parent.localToWorld(T.g.home.pos.clone()) : slotWorld(T.sl);
+      const p = T.from.clone().lerp(to, e); p.y += Math.sin(Math.PI * e) * 0.25;
+      T.g.obj.position.copy(rig.worldToLocal(p));
+      if (u >= 1) { tweens.splice(i, 1); if (T.home) { T.g.home.parent.add(T.g.obj); T.g.obj.position.copy(T.g.home.pos); T.g.obj.quaternion.copy(T.g.home.q); } else putInSlot(T.g, T.sl); }
+    }
+    for (let i = falls.length - 1; i >= 0; i--) {
+      const F = falls[i]; const o = F.g.obj; const pw = o.getWorldPosition(new THREE.Vector3()); const h = Wv(0, 0, surfaceBelow(pw)).y;
+      F.v += 9.8 * dt; pw.y -= F.v * dt;
+      if (pw.y <= h) {
+        pw.y = h; falls.splice(i, 1); const drop = F.y0 - h;
+        o.quaternion.setFromEuler(new THREE.Euler(0, o.rotation.y, 0));
+        if (F.g.kind === 'frasco' && h < 0.05 && drop > 0.4) { say('', 'Frasco de ativo derrubado no piso!', true); snd('vidro', pw, 1); }
+        else if (F.g.kind === 'garrafao' && h < 0.05 && drop > 0.25) { say(F.g.mn || '', 'Garrafão de vidro derrubado — risco de quebra!', true); snd('vidro', pw, 1); }
+        else snd('encaixe', pw, 0.5);
+      }
+      o.position.copy(o.parent.worldToLocal(pw));
+    }
+  }
+  // ---------------- líquido na pipeta e filete ao dispensar
+  if (pipObj) {
+    const liq = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0062, 1, 12), new THREE.MeshStandardMaterial({ color: 0xc98a2a, transparent: true, opacity: 0.85, roughness: 0.2 }));
+    liq.position.set(0, -0.395, 0); liq.scale.set(1, 0.001, 1); pipObj.add(liq); IM.pipLiq = liq;
+    const fil = new THREE.Mesh(new THREE.CylinderGeometry(0.0015, 0.0012, 0.07, 6), liq.material); fil.position.set(0, -0.455, 0); fil.visible = false; pipObj.add(fil); IM.filete = fil;
+  }
+  IM.pipLevel = 0;
+  // tonalidade do ativo na solução depois da pipetagem
+  const solMats = {};
+  for (const mn of MN) { solMats[mn] = {}; for (let k = 1; k <= 6; k++) { const o = machines[mn].root.getObjectByName(`G${k}_solucao_3,6_L`) || machines[mn].root.getObjectByName(`G${k} solucao 3,6 L`); if (o) o.traverse((mm) => { if (mm.isMesh) { mm.material = mm.material.clone(); solMats[mn][k] = { m: mm.material, base: mm.material.color.clone() }; } }); } }
+  const AMBAR = new THREE.Color(0xd8a24a);
+  // ---------------- falhas simuladas
+  const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshStandardMaterial({ color: 0x9fc4d6, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.1 }));
+  puddle.rotation.x = -Math.PI / 2; puddle.visible = false; world.add(puddle);
+  function faults(t) {
+    // garrafão trincado: M3, 1º ciclo, 40 s simulados de mistura → vazamento pelo fundo (G5, lado traseiro)
+    if (has('garrafao') && !IM.flags.f_leak) { const c = R.machines.M3.cycles[0]; if (c && c.mix && !c.leak && t >= c.mix[0] + S(40) && c.stop === undefined) {
+      IM.flags.f_leak = true; c.leak = { t, k: 5 }; const g = grabs.find((x) => x.mn === 'M3' && x.k === 5); if (g) g.cracked = true;
+      IM.faultLog.push({ tipo: 'Garrafão trincado (M3 · G5)', t }); say('M3', 'VAZAMENTO sob a máquina (G5)! Pressione PARAR ou EMERGÊNCIA', true); ev('erro', { m: 'M3' }); } }
+    for (const mn of MN) { const c = cur(mn); if (c && c.leak && !c.leak.stopT) {
+      if (c.stop !== undefined) { c.leak.stopT = c.stop; IM.faultLog.push({ tipo: `Vazamento contido em ${ms((c.stop - c.leak.t) * K)}`, t }); }
+      else if (t - c.leak.t > S(60)) once('leak_' + mn, () => say(mn, 'Vazamento não contido em 1 min', true));
+      else if (Math.floor(t * 2) % 7 === 0) OP.msg[mn] = { text: 'VAZAMENTO! Pressione PARAR ou EMERGÊNCIA', err: true, until: t + 1 };
+    } }
+    const lk = R.machines.M3.cycles.find((c) => c.leak);
+    if (lk) { const r = Math.min(0.15 + ((lk.leak.stopT || t) - lk.leak.t) / S(60) * 0.55, 0.7); puddle.visible = true; puddle.scale.setScalar(r);
+      const m = machines.M3; puddle.position.copy(world.worldToLocal(m.root.localToWorld(mLocal(m, 0.02, 0.85, 0.004)))); }
+    // falha de motor: M1, 2º ciclo, 60 s simulados de mistura → inversor desarma
+    if (has('motor') && !IM.flags.f_motor) { const c = R.machines.M1.cycles[1]; if (c && c.mix && !c.fault && c.stop === undefined && t >= c.mix[0] + S(60)) {
+      IM.flags.f_motor = true; c.fault = 'motor'; c.stop = t; c.faultT = t; segs('M1'); IM.faultLog.push({ tipo: 'Falha de motor M1 (sobrecorrente)', t }); say('M1', 'FALHA MOTOR — inversor desarmou. Verifique e pressione REARME', true); ev('erro', { m: 'M1' }); } }
+  }
+  // ---------------- ações novas
+  const AUTO = ['FECHANDO', 'DOSANDO', 'VALIDANDO', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO', 'SEM_SOLUCAO'];
+  function restart(mn) {
+    const t = st.t, C = R.machines[mn].cycles, c = cur(mn);
+    const miss = [1, 2, 3, 4, 5, 6].filter((k) => !IM.bottles[mn][k]);
+    if (miss.length) return say(mn, `Garrafão ausente em ${miss.map((k) => 'G' + k).join(', ')} (sensor capacitivo)`, true);
+    const cr = grabs.find((g) => g.mn === mn && g.cracked && g.slot && g.slot.kind === 'maq' && g.slot.mn === mn);
+    if (cr) return say(mn, `Troque o garrafão trincado (G${cr.k}) por um reserva do carrinho`, true);
+    if (openSide(c, 'F') || openSide(c, 'T')) return say(mn, 'Feche as portas antes de reiniciar', true);
+    IM.aborted.push({ mn, n: c.n, t }); C.pop(); newCycle(mn, t + 0.2); say(mn, 'Ciclo reiniciado'); return true;
+  }
+  IM.ihm = (mn) => {
+    const t = st.t, s = state(mn, t), c = cur(mn);
+    if (s.k === 'SEM_SOLUCAO') { if (!c.hold.ack) { c.hold.ack = t; c.hold.resume = t + S(45); const dt = c.hold.resume - c.hold.t0; c.dosa[1] = c.hold.dosaEnd + dt; c.ready = c.dosa[1]; segs(mn);
+      IM.faultLog.push({ tipo: `Falta de solução reconhecida em ${ms((t - c.hold.t0) * K)}`, t }); say(mn, 'Reposição solicitada · dosagem retoma em 0:45'); } else say(mn, 'Aguardando reposição da solução'); return true; }
+    if (['PARADA', 'EMERGENCIA', 'FALHA'].includes(s.k)) { if (IM.emerg[mn]) say(mn, 'Emergência acionada: gire o cogumelo para destravar e pressione REARME', false, true); else if (!c.rearmed) say(mn, 'Pressione REARME (botão azul)'); else restart(mn); return true; }
+    if (s.k === 'PRONTA' && !c && MN.every((x) => !cur(x))) epiGate(mn);
+    if (s.k === 'PRONTA' && c === null) { const miss = [1, 2, 3, 4, 5, 6].filter((k) => !IM.bottles[mn][k]); if (miss.length) { say(mn, `Garrafão ausente em ${miss.map((k) => 'G' + k).join(', ')}`, true); return true; } }
+    if (s.k === 'CONCLUIDO' && c) { const miss = [1, 2, 3, 4, 5, 6].filter((k) => !IM.bottles[mn][k]); say(mn, miss.length ? `Lote concluído · ${6 - miss.length}/6 garrafões na máquina` : 'Lote concluído'); return true; }
+    return false;
+  };
+  function epiGate(mn) { const E = IM.epi; if (!(E.maos && E.luvas && E.touca)) once('epi', () => say(mn, `Operação iniciada sem EPI completo (${[!E.maos && 'mãos', !E.luvas && 'luvas', !E.touca && 'touca/jaleco'].filter(Boolean).join(', ')})`, false, true)); }
+  function actButton(mn, b) {
+    const t = st.t, s = state(mn, t), c = cur(mn);
+    ev('ihm_toque', { m: mn });
+    if (b === 'iniciar') { if (['PARADA', 'EMERGENCIA', 'FALHA', 'PRONTA', 'CONCLUIDO'].includes(s.k) || !c) return actIHM(mn); return say(mn, 'Máquina já em ciclo'); }
+    if (b === 'parar') { if (c && (AUTO.includes(s.k) || s.k === 'PIPETAR') && c.stop === undefined) { c.stop = t; c.rearmed = true; segs(mn); ev('botao', { m: mn }); say(mn, 'Máquina PARADA · INICIAR reinicia o ciclo'); } else say(mn, 'Nada a parar'); return; }
+    if (b === 'emerg') {
+      if (IM.emerg[mn]) { IM.emerg[mn] = false; say(mn, 'Emergência destravada · pressione REARME'); return; }
+      IM.emerg[mn] = true; if (c && c.stop === undefined && (AUTO.includes(s.k) || s.k === 'PIPETAR')) { c.stop = t; c.emerg = true; c.rearmed = false; segs(mn); }
+      else if (c) { c.emerg = true; c.rearmed = false; if (c.stop === undefined) c.stop = t; segs(mn); }
+      ev('erro', { m: mn }); say(mn, 'EMERGÊNCIA ACIONADA · máquina travada'); return;
+    }
+    if (b === 'rearme') {
+      if (IM.emerg[mn]) return say(mn, 'Destrave a emergência antes (toque de novo no cogumelo)', false, true);
+      if (c && ['PARADA', 'EMERGENCIA', 'FALHA'].includes(s.k)) { if (c.fault === 'motor' && t - c.faultT < S(20)) return say(mn, 'Aguarde o inversor resfriar (20 s)'); c.rearmed = true; if (c.fault) IM.faultLog.push({ tipo: `Rearme após falha de motor em ${ms((t - c.faultT) * K)}`, t }); say(mn, 'Rearmado · toque INICIAR para reiniciar o ciclo'); }
+      else say(mn, 'Sem falha para rearmar');
+    }
+  }
+  // falha de sensor do bocal (M2 · 1º ciclo · P3): dose aplicada sem leitura
+  IM.dispense = (mn, k, viaPipeta) => {
+    const c = cur(mn), key = 'P' + k, t = st.t;
+    epiGate(mn);
+    if (!IM.lote.lido) once('lote', () => say(mn, 'Ativo pipetado sem leitura do lote no tablet', false, true));
+    if (!c || state(mn, t).k !== 'PIPETAR') return false;
+    if (has('sensor') && !IM.flags.f_sensor && mn === 'M2' && c.n === 1 && k === 3 && !c.sensorFail && c.pip[key] === undefined) {
+      IM.flags.f_sensor = true;
+      if (!(c.k === 3 ? openSide(c, 'F') : openSide(c, 'F'))) return false;
+      c.sensorFail = { t }; c.tampas[key] = [t, t + 1.3]; OP.pip.loaded = 0; IM.faultLog.push({ tipo: 'Sensor P3 (M2) sem leitura', t });
+      say(mn, 'P3: dose aplicada mas o sensor NÃO leu. Reposicione a ponteira no bocal sem dispensar de novo', true); ev('erro', { m: mn }); return true;
+    }
+    if (c.sensorFail && k === 3 && c.pip[key] === undefined) {
+      if (viaPipeta && OP.pip.loaded >= 30) { say(mn, 'Dose dupla em P3 (a dose já tinha sido aplicada)', true); OP.pip.loaded = 0; }
+      c.pip[key] = t + 0.3; c.tampas[key] = [t, t + 1.0]; R.events.push({ t: t + 0.3, type: 'pipeta', m: mn, p: 3 }); IM.faultLog.push({ tipo: `Leitura P3 recuperada em ${ms((t - c.sensorFail.t) * K)}`, t });
+      say(mn, 'Leitura do sensor P3 OK'); return true;
+    }
+    return false;
+  };
+  // ativações extras (retorna true se tratou)
+  IM.activate = (info, how) => {
+    const src = how && how.src;
+    if (info.kind === 'botao') { actButton(info.mn, info.b); buzz(src, 0.6, 40); return true; }
+    if (info.kind === 'alcool') { if (!IM.epi.maos) { IM.epi.maos = true; say('', 'Mãos higienizadas'); } else say('', 'Mãos já higienizadas'); snd('gel', Wv(2.825, -4.95, 1.33)); drawEPI(); return true; }
+    if (info.kind === 'luvas') { if (!IM.epi.maos) say('', 'Higienize as mãos antes de calçar as luvas', false, true); IM.epi.luvas = true; refreshHands(); snd('luva', Wv(-2.835, -4.85, 0.95)); say('', 'Luvas nitrílicas calçadas'); drawEPI(); return true; }
+    if (info.kind === 'epi') { IM.epi.touca = true; say('', 'Touca e jaleco conferidos'); drawEPI(); return true; }
+    if (info.kind === 'tablet') {
+      if (!IM.lote.lido) { IM.lote.lido = Math.max(st.t, 0.001); say('', 'Lote do ativo lido: 26-0925'); }
+      else if (OP.done && !IM.lote.assinado) { IM.lote.assinado = Math.max(st.t, 0.001); say('', 'Registro do lote assinado'); }
+      else say('', OP.done ? 'Registro já assinado' : 'Assinatura liberada ao fim dos 8 ciclos');
+      drawTab(); return true;
+    }
+    if (info.kind === 'memoria') { SR.toggle(); buzz(src, 0.4, 40); return true; }
+    if (info.kind === 'produto') { const it = SR.products[info.i]; if (!SR.isOpen()) return true; it.spin = 2.5; say('', `${it.p.nome} · ${it.p.ind}`); return true; }
+    if (info.kind === 'carrinho') { say('', 'Carrinho: no Quest segure a alça com o grip para empurrar'); return true; }
+    if (info.kind === 'garrafao') {
+      const g = info.g; if (src && src.targetRayMode === 'tracked-pointer') { say('', 'Use o grip para pegar o garrafão'); return true; }
+      if (tweens.some((T) => T.g === g)) return true;
+      if (g.slot && g.slot.kind === 'maq') { if (!canTakeBottle(g)) { say(g.mn, 'Garrafão preso: cabeçote fechado ou porta travada', false, true); return true; }
+        const sl = freeSlot('carrinho', cart.getWorldPosition(new THREE.Vector3()), (s) => s.row === 0); if (!sl) { say('', 'Carrinho cheio'); return true; }
+        if (state(g.mn, st.t).k === 'CONCLUIDO') IM.retirados = (IM.retirados || 0) + 1; tweenTo(g, sl); return true; }
+      // do carrinho para a máquina: primeira vaga livre da máquina mais próxima com porta aberta
+      let best = null; for (const sl of slots) { if (sl.occupant || sl.kind !== 'maq') continue; if (!g.reserva && sl.mn !== g.mn) continue; const c = cur(sl.mn);
+        if (c && !openSide(c, sl.k <= 3 ? 'F' : 'T')) continue; const d = slotWorld(sl).distanceTo(cart.getWorldPosition(new THREE.Vector3())); if (!best || d < best.d) best = { sl, d }; }
+      if (!best) say('', 'Abra a porta da máquina com a vaga livre'); else tweenTo(g, best.sl); return true;
+    }
+    return false;
+  };
+  IM.label = (info) => {
+    if (info.kind === 'botao') { const N = { iniciar: 'INICIAR (verde)', parar: 'PARAR', rearme: 'REARME (azul)', emerg: IM.emerg[info.mn] ? 'EMERGÊNCIA acionada · toque para destravar' : 'EMERGÊNCIA' }; return `${info.mn} · ${N[info.b]}`; }
+    if (info.kind === 'alcool') return IM.epi.maos ? 'Álcool gel ✔' : 'Álcool gel · higienizar as mãos';
+    if (info.kind === 'luvas') return IM.epi.luvas ? 'Luvas ✔' : 'Caixa de luvas nitrílicas · calçar';
+    if (info.kind === 'epi') return 'Checklist de EPI · confirmar touca e jaleco';
+    if (info.kind === 'tablet') return IM.lote.lido ? (OP.done ? 'Tablet · assinar registro do lote' : 'Tablet · registro de lote') : 'Tablet · ler lote do ativo';
+    if (info.kind === 'memoria') return SR.isOpen() ? 'Fechar a porta do Espaço Memória' : 'Abrir o Espaço Memória · Grupo Real';
+    if (info.kind === 'produto') { const it = SR.products[info.i]; return `${it.p.nome} · ${it.p.ind}`; }
+    if (info.kind === 'carrinho') return 'Carrinho de garrafões (grip na alça para empurrar)';
+    if (info.kind === 'garrafao') { const g = info.g; return g.reserva ? 'Garrafão reserva (vazio)' : `${g.mn} · garrafão G${g.k}${g.cracked ? ' · TRINCADO' : ''}`; }
+    return null;
+  };
+  // ---------------- modo guiado: seta 3D no próximo passo
+  const arrow = new THREE.Group(); const AM = new THREE.MeshBasicMaterial({ color: 0x2fbf71, toneMapped: false });
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.11, 18), AM); cone.rotation.x = Math.PI; arrow.add(cone);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.12, 10), AM); shaft.position.y = 0.11; arrow.add(shaft);
+  arrow.visible = false; scene.add(arrow);
+  const findT = (fn) => targets.find((t) => t.userData.op && fn(t.userData.op));
+  function nextStep() {
+    const E = IM.epi, t = st.t;
+    if (!E.maos) return [findT((i) => i.kind === 'alcool'), 'Higienize as mãos no álcool gel (ao lado da porta)'];
+    if (!E.luvas) return [findT((i) => i.kind === 'luvas'), 'Calce as luvas (caixa na bancada)'];
+    if (!E.touca) return [findT((i) => i.kind === 'epi'), 'Confirme touca e jaleco no quadro de EPI'];
+    if (!IM.lote.lido) return [findT((i) => i.kind === 'tablet'), 'Leia o lote do ativo no tablet'];
+    for (const mn of MN) { const s = state(mn, t), c = cur(mn);
+      if (s.k === 'SEM_SOLUCAO' && !c.hold.ack) return [findT((i) => i.kind === 'ihm' && i.mn === mn), `${mn}: reconheça a falta de solução na IHM`];
+      if (c && c.leak && c.stop === undefined) return [findT((i) => i.kind === 'botao' && i.mn === mn && i.b === 'parar'), `${mn}: VAZAMENTO — pressione PARAR`];
+      if (['PARADA', 'EMERGENCIA', 'FALHA'].includes(s.k)) {
+        if (IM.emerg[mn]) return [findT((i) => i.kind === 'botao' && i.mn === mn && i.b === 'emerg'), `${mn}: destrave a emergência`];
+        const cr = grabs.find((g) => g.mn === mn && g.cracked && g.slot && g.slot.kind === 'maq');
+        if (cr) { if (!openSide(c, 'T')) return [findT((i) => i.kind === 'porta' && i.mn === mn && i.lado === 'T'), `${mn}: abra a porta traseira para trocar G${cr.k}`]; return [findT((i) => i.kind === 'garrafao' && i.g === cr), `${mn}: retire o garrafão trincado G${cr.k}`]; }
+        const miss = [1, 2, 3, 4, 5, 6].filter((k) => !IM.bottles[mn][k]);
+        if (miss.length) return [findT((i) => i.kind === 'garrafao' && i.g.reserva && i.g.slot && i.g.slot.kind === 'carrinho'), `${mn}: coloque um garrafão reserva em G${miss[0]}`];
+        if (openSide(c, 'T') || openSide(c, 'F')) return [findT((i) => i.kind === 'porta' && i.mn === mn && i.lado === (openSide(c, 'T') ? 'T' : 'F')), `${mn}: feche a porta`];
+        if (!c.rearmed) return [findT((i) => i.kind === 'botao' && i.mn === mn && i.b === 'rearme'), `${mn}: pressione REARME`];
+        return [findT((i) => i.kind === 'botao' && i.mn === mn && i.b === 'iniciar'), `${mn}: pressione INICIAR para reiniciar`];
+      } }
+    if (MN.every((mn) => !cur(mn))) return [findT((i) => i.kind === 'ihm' && i.mn === 'M1'), 'Toque PARTIDA ESCALONADA na IHM da M1'];
+    const pip = MN.filter((mn) => state(mn, t).k === 'PIPETAR').sort((a, b) => cur(a).ready - cur(b).ready);
+    if (pip.length) {
+      const mn = pip[0], c = cur(mn), quest = renderer.xr.isPresenting;
+      for (const [lado, ks] of [['T', [4, 5, 6]], ['F', [1, 2, 3]]]) {
+        const miss = ks.filter((k) => c.pip['P' + k] === undefined);
+        if (miss.length) {
+          if (!openSide(c, lado)) return [findT((i) => i.kind === 'porta' && i.mn === mn && i.lado === lado), `${mn}: abra a porta ${lado === 'T' ? 'traseira' : 'da frente'}`];
+          if (quest && !OP.pip.holder) return [findT((i) => i.kind === 'pipeta'), 'Pegue a pipeta na bancada'];
+          if (quest && !OP.pip.loaded && !(c.sensorFail && miss[0] === 3)) return [flaskObj, 'Aspire 30 mL no frasco (ponta no frasco + gatilho)'];
+          return [findT((i) => i.kind === 'bocal' && i.mn === mn && i.k === miss[0]), `${mn}: pipete 30 mL no bocal P${miss[0]}`];
+        }
+        if (openSide(c, lado)) return [findT((i) => i.kind === 'porta' && i.mn === mn && i.lado === lado), `${mn}: feche a porta ${lado === 'T' ? 'traseira' : 'da frente'}`];
+      }
+      return [findT((i) => i.kind === 'ihm' && i.mn === mn), `${mn}: toque CONFIRMAR na IHM`];
+    }
+    if (OP.done && OP.tankVol(t) > 0.5 && t >= R.transfer.t1) return [findT((i) => i.kind === 'transf'), 'Transfira o TQ-01 para a sala de tanques'];
+    if (OP.done && !IM.lote.assinado) return [findT((i) => i.kind === 'tablet'), 'Assine o registro do lote no tablet'];
+    if (OP.done && !SR.isOpen()) return [findT((i) => i.kind === 'memoria'), 'Bônus: conheça o Espaço Memória do Grupo Real'];
+    const nx = MN.map((mn) => cur(mn)).filter((c) => c && c.ready > t).sort((a, b) => a.ready - b.ready)[0];
+    return [null, nx ? `Aguardando dosagem · use ⏩ Avançar` : ''];
+  }
+  IM.next = nextStep;
+  // ---------------- atualização por quadro (chamada pelo OP.update)
+  let lastBuzz = 0;
+  IM.update = (t, dt) => {
+    faults(t); stepTweens(dt); SR.update(dt);
+    for (const mn of MN) for (let k = 1; k <= 6; k++) { const S_ = solMats[mn][k]; if (!S_) continue; const c = cur(mn); const on = c && c.pip['P' + k] !== undefined && t >= c.pip['P' + k] && !(c.dreno && t >= c.dreno[1]); S_.m.color.copy(S_.base).lerp(AMBAR, on ? 0.35 : 0); }
+    if (IM.pipLiq) { const want = OP.pip.loaded >= 30 ? 0.19 : 0; IM.pipLevel += (want - IM.pipLevel) * Math.min(1, dt * 3); IM.pipLiq.scale.y = Math.max(IM.pipLevel, 0.001); IM.pipLiq.position.y = -0.395 + IM.pipLevel / 2;
+      if (IM.filete) IM.filete.visible = performance.now() < (IM.fileteUntil || 0); }
+    for (const mn of MN) { const m = machines[mn]; if (m.snd && m.snd.fill) setLoop(m.snd.fill, st.playing && state(mn, t).k === 'DOSANDO' ? 0.25 : 0); }
+    if (IM.guiado) { const [obj, text] = nextStep(); IM.guideText = text;
+      if (obj) { const bb = new THREE.Box3().setFromObject(obj); const c = bb.getCenter(new THREE.Vector3()); c.y = bb.max.y + 0.12 + 0.03 * Math.sin(performance.now() / 220); arrow.position.copy(c); arrow.visible = true; } else arrow.visible = false;
+      $('guia').textContent = text ? '🧭 ' + text : ''; $('guia').style.display = text && !renderer.xr.isPresenting ? 'block' : 'none';
+    } else { arrow.visible = false; $('guia').style.display = 'none'; }
+    if (renderer.xr.isPresenting) {                        // vibração ao encostar a mão numa máquina dinamizando
+      const now = performance.now();
+      if (now - lastBuzz > 480) { lastBuzz = now;
+        for (const g of grips) { const s = g.userData.src; if (!s) continue; const p = g.getWorldPosition(new THREE.Vector3());
+          for (const mn of MN) if (state(mn, t).k === 'DINAMIZANDO') { const bb = new THREE.Box3().setFromObject(machines[mn].root); bb.expandByScalar(0.05); if (bb.containsPoint(p)) buzz(s, 0.35, 45); } } }
+      updateHandJoints(); pokeCheck();
+    }
+    if (Math.floor(t * 4) !== IM._tk) { IM._tk = Math.floor(t * 4); drawTab(); }
+  };
+  drawEPI(); drawTab();
+  // ---------------- interface: cenário de falhas e modo guiado
+  const selF = document.createElement('select'); selF.id = 'falhas'; selF.title = 'Falhas simuladas';
+  [['nenhuma', 'Sem falhas'], ['todas', 'Todas as falhas'], ['sensor', 'Falha: sensor do bocal'], ['garrafao', 'Falha: garrafão trincado'], ['solucao', 'Falha: falta de solução'], ['motor', 'Falha: motor']].forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; selF.appendChild(o); });
+  selF.value = IM.cenario; selF.onchange = () => { const u = new URLSearchParams(location.search); u.set('falhas', selF.value); location.search = u.toString(); };
+  const bG = document.createElement('button'); bG.textContent = '🧭 Guiado'; bG.classList.toggle('on', IM.guiado); bG.onclick = () => { IM.guiado = !IM.guiado; bG.classList.toggle('on', IM.guiado); };
+  sk.after(selF); selF.after(bG);
+  const guia = document.createElement('div'); guia.id = 'guia'; document.body.appendChild(guia);
+
+  window.__op = { OP, IM, actIHM, actDoor, dispense, actTransfer, pick, targets, state, restart: (mn) => IM.ihm(mn) };
 }
 
 // ------------------------------------------------------------------ laço principal
 let last = performance.now(), acc = 0, prevT = 0;
 function update(t, dt, playing) {
-  if (!OP) mixS.setTime(Math.min(t, gs.animations[0].duration - 1e-3)); else OP.update(t);
+  if (!OP) { mixS.setTime(Math.min(t, gs.animations[0].duration - 1e-3)); SR.update(dt); } else OP.update(t, dt);
   for (const mn of MN) { const m = machines[mn]; m.act.time = clipTime(m.R, t).c; m.mixer.update(0); updateMachineProps(m, mn, t); }
   for (const n in people) {
     const p = people[n]; if (!p.a) continue;
@@ -1195,7 +1963,7 @@ window.__shot = (t, pos, tg) => {
   } else if (pos) { camMode = 'livre'; camera.position.copy(B(...pos)); controls.target.copy(B(...tg)); controls.update(); }
   renderer.render(scene, camera); return true;
 };
-window.__scene = scene; window.__ready = true;
+window.__scene = scene; window.__sr = SR; window.__R = R; window.__ready = true;
 window.__Box3 = THREE.Box3;
 window.__tick = (t) => { st.t = t; update(t, 0.3, false); };
 window.__xrtest = { XR, arFrame, onSelectStart, onSelectEnd, startPlacing, world, rotateBy };
