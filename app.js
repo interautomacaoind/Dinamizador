@@ -53,7 +53,7 @@ function loadGLB(url) {
   }, bad));
 }
 const EXT = window.__EXT || '.glb';
-const [gs, gm] = await Promise.all([loadGLB('assets/sala_cena' + EXT), loadGLB('assets/maquina_rev16' + EXT)]);
+const [gs, gm] = await Promise.all([loadGLB('assets/sala_cena' + EXT), loadGLB('assets/maquina_rev17' + EXT)]);
 const sala = gs.scene; world.add(sala);
 const mixS = new THREE.AnimationMixer(sala);
 const actS = mixS.clipAction(gs.animations[0]); actS.play();
@@ -76,7 +76,14 @@ for (const mn of MN) {
   const scr = root.getObjectByName('IHM_TELA_IMG');
   if (scr) scr.traverse((o) => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }); });
   const tower = { verde: root.getObjectByName('TORRE_VERDE'), amarelo: root.getObjectByName('TORRE_AMARELO'), vermelho: root.getObjectByName('TORRE_VERMELHO') };
-  machines[mn] = { R: M, root, mixer, act, cv, ctx: cv.getContext('2d'), tex, tower, pos: B(M.pos[0], M.pos[1], 1.2), lastStroke: -1 };
+  // REV17: portas (abrem na pipetagem), tampas dos bocais e LED verde do sensor de cada bocal
+  const node = (n) => root.getObjectByName(n);
+  const doors = { F: [node('PORTA_FRENTE_FOLHA_DIR'), node('PORTA_FRENTE_FOLHA_ESQ')], T: [node('PORTA_TRAS_FOLHA_DIR'), node('PORTA_TRAS_FOLHA_ESQ')] };
+  const caps = [1, 2, 3, 4, 5, 6].map((k) => node('TAMPA_BOCAL_P' + k));
+  const leds = [1, 2, 3, 4, 5, 6].map((k) => node('LED_OK_P' + k));
+  const rest = (o) => (o ? o.rotation.clone() : null);
+  machines[mn] = { R: M, root, mixer, act, cv, ctx: cv.getContext('2d'), tex, tower, pos: B(M.pos[0], M.pos[1], 1.2), lastStroke: -1,
+    doors, caps, leds, doorRest: { F: doors.F.map(rest), T: doors.T.map(rest) }, capRest: caps.map(rest) };
 }
 
 // ------------------------------------------------------------------ telas: TV, relógio, painel do tanque
@@ -133,16 +140,20 @@ function theta(c) {                                           // ângulo da mani
   return 4 * Math.PI + W * (c - 25);
 }
 
+const EV_PARTIDA = R.events.find((e) => e.type === 'partida_escalonada');
+function curCycle(mn, t) { let c = null; for (const x of R.machines[mn].cycles) if (t >= x.start) c = x; return c; }
+function pipCount(c, t) { return c ? Object.values(c.pip).filter((v) => v <= t).length : 0; }
 function state(mn, t) {
   const M = R.machines[mn]; const C = M.cycles;
   let st = { k: 'PRONTA', cyc: null, n: 0 };
+  if (EV_PARTIDA && t >= EV_PARTIDA.t && t < C[0].start) return { k: 'AGENDADA', cyc: null, n: 0, at: C[0].start };
   for (const c of C) {
     if (t < c.start) break;
     st = { cyc: c, n: c.n };
     if (t < c.fecha[1]) st.k = 'FECHANDO';
     else if (t < c.dosa[1]) st.k = 'DOSANDO';
-    else if (c.run === undefined || t < c.run) st.k = 'ATIVO_MANUAL';
-    else if (t < c.ativo[1]) st.k = 'ATIVO_LINHA';
+    else if (c.run === undefined || t < c.run) st.k = 'PIPETAR';
+    else if (t < c.mix[0]) st.k = 'VALIDANDO';
     else if (t < c.mix[1]) st.k = 'DINAMIZANDO';
     else if (t < c.dreno[0]) st.k = 'PAUSA';
     else if (t < c.dreno[1]) st.k = 'DRENANDO';
@@ -151,11 +162,35 @@ function state(mn, t) {
   }
   return st;
 }
-const LABEL = { PRONTA: 'PRONTA', FECHANDO: 'FECHANDO CABEÇOTES', DOSANDO: 'DOSANDO SOLUÇÃO BASE', ATIVO_MANUAL: 'INJETAR ATIVO P1–P6',
-  ATIVO_LINHA: 'ATIVO → GARRAFÕES', DINAMIZANDO: 'DINAMIZANDO', PAUSA: 'ESTABILIZANDO', DRENANDO: 'DRENANDO → TQ-01', ABRINDO: 'ABRINDO CABEÇOTES',
-  FIM_CICLO: 'CICLO CONCLUÍDO', CONCLUIDO: 'LOTE CONCLUÍDO' };
-const COLOR = { PRONTA: '#9fb0bf', FECHANDO: '#3d8bfd', DOSANDO: '#3d8bfd', ATIVO_MANUAL: '#f5b31a', ATIVO_LINHA: '#f08c2e', DINAMIZANDO: '#2fbf71',
+const LABEL = { PRONTA: 'PRONTA', AGENDADA: 'PARTIDA PROGRAMADA', FECHANDO: 'FECHANDO CABEÇOTES', DOSANDO: 'DOSANDO SOL. HIDROALCOÓLICA 20%',
+  PIPETAR: 'PIPETAR ATIVO P1–P6', VALIDANDO: 'SENSORES 6/6 OK', DINAMIZANDO: 'DINAMIZANDO', PAUSA: 'ESTABILIZANDO', DRENANDO: 'DRENANDO → TQ-01',
+  ABRINDO: 'ABRINDO CABEÇOTES', FIM_CICLO: 'CICLO CONCLUÍDO', CONCLUIDO: 'LOTE CONCLUÍDO' };
+const COLOR = { PRONTA: '#9fb0bf', AGENDADA: '#9fb0bf', FECHANDO: '#3d8bfd', DOSANDO: '#3d8bfd', PIPETAR: '#f5b31a', VALIDANDO: '#2fbf71', DINAMIZANDO: '#2fbf71',
   PAUSA: '#2fbf71', DRENANDO: '#19b3c9', ABRINDO: '#3d8bfd', FIM_CICLO: '#9fb0bf', CONCLUIDO: '#9fb0bf' };
+function fitFont(g, txt, maxW, px, weight = 'bold') {       // reduz a fonte até caber (nada cortado)
+  let p = px; g.font = `${weight} ${p}px system-ui,sans-serif`;
+  while (g.measureText(txt).width > maxW && p > 9) { p -= 1; g.font = `${weight} ${p}px system-ui,sans-serif`; }
+}
+const sm01 = (x) => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
+function updateMachineProps(m, mn, t) {
+  const C = R.machines[mn].cycles;
+  // portas: abertas somente durante a pipetagem daquele lado
+  for (const lado of ['F', 'T']) {
+    let u = 0;
+    for (const c of C) for (const [l, a, b] of c.portas) if (l === lado && t >= a - 0.05 && t < b + 0.8) u = Math.max(u, sm01((t - a) / 0.8) * (1 - sm01((t - b) / 0.8)));
+    const sg = lado === 'F' ? 1 : -1;
+    m.doors[lado].forEach((o, i) => { if (o) { o.rotation.copy(m.doorRest[lado][i]); o.rotateY(sg * (i === 0 ? 1 : -1) * 1.75 * u); } });
+  }
+  const c = curCycle(mn, t);
+  for (let k = 0; k < 6; k++) {
+    const cap = m.caps[k], led = m.leds[k], key = 'P' + (k + 1);
+    let u = 0;
+    if (c && c.tampas[key]) { const [a, b] = c.tampas[key]; u = sm01((t - a) / 0.35) * (1 - sm01((t - b) / 0.35)); }
+    if (cap) { cap.rotation.copy(m.capRest[k]); cap.rotateX((k < 3 ? -1 : 1) * 1.9 * u); }
+    const on = c && c.pip[key] !== undefined && t >= c.pip[key] && !(c.abre && t >= c.abre[1]);
+    if (led) led.scale.setScalar(on ? 1 : 0.001);
+  }
+}
 
 function tankVol(t) {
   const T = R.tank; if (t <= T[0][0]) return T[0][1];
@@ -183,7 +218,7 @@ function drawIHM(m, mn, t) {
   g.fillStyle = '#12304a'; g.fillRect(0, 0, 400, 34);
   g.fillStyle = '#fff'; g.font = 'bold 19px system-ui,sans-serif'; g.fillText(`CMR ${mn}`, 10, 24);
   g.font = '15px system-ui,sans-serif'; g.fillStyle = '#9fd0ff'; g.fillText(hms(simT(t)), 300, 23);
-  g.fillStyle = COLOR[st.k]; g.font = 'bold 22px system-ui,sans-serif';
+  g.fillStyle = COLOR[st.k]; fitFont(g, LABEL[st.k], 376, 22);
   g.fillText(LABEL[st.k], 12, 68);
   g.font = '15px system-ui,sans-serif'; g.fillStyle = '#cfe0ee';
   g.fillText(`Ciclo ${st.n || 0} / 2   ·   Modo AUTO`, 12, 92);
@@ -196,17 +231,21 @@ function drawIHM(m, mn, t) {
       g.fillStyle = '#cfe0ee'; g.fillText(`P${i + 1}`, x + 14, 222);
     }
     g.fillText(`${(3.6 * Math.min(u, 1)).toFixed(2).replace('.', ',')} L`, 300, 92);
-  } else if (st.k === 'ATIVO_MANUAL') {
-    const blink = Math.floor(t * 2) % 2;
+  } else if (st.k === 'PIPETAR' || st.k === 'VALIDANDO') {
+    const blink = Math.floor(t * 2) % 2, n = pipCount(c, t);
     for (let i = 0; i < 6; i++) {
-      const ok = c.inj[i] !== undefined && t >= c.inj[i];
+      const v = c.pip['P' + (i + 1)], ok = v !== undefined && t >= v;
       const x = 14 + i * 64;
-      g.fillStyle = ok ? '#2fbf71' : (blink ? '#f5b31a' : '#4a3a12'); g.fillRect(x, 110, 50, 50);
-      g.fillStyle = '#0b1622'; g.font = 'bold 20px system-ui'; g.fillText(ok ? '✔' : `P${i + 1}`, x + (ok ? 16 : 10), 143);
+      g.fillStyle = ok ? '#2fbf71' : (blink ? '#f5b31a' : '#4a3a12'); g.fillRect(x, 106, 50, 50);
+      g.fillStyle = '#0b1622'; g.font = 'bold 20px system-ui'; g.fillText(ok ? '✔' : `P${i + 1}`, x + (ok ? 16 : 10), 139);
     }
-    g.font = '15px system-ui'; g.fillStyle = '#cfe0ee';
-    g.fillText('Pipete 1 mL em cada funil e aperte ATIVO OK', 12, 190);
-  } else if (st.k === 'DINAMIZANDO' || st.k === 'ATIVO_LINHA' || st.k === 'PAUSA') {
+    g.font = '14px system-ui'; g.fillStyle = '#cfe0ee';
+    g.fillText(`Sensores dos bocais: ${n}/6 registros · 30 mL/garrafão`, 12, 176);
+    g.fillText(st.k === 'VALIDANDO' ? 'Todos os bocais registrados — mistura liberada' : n < 6 ? 'Abra a porta, pipete em cada bocal e feche' : 'Feche as portas e toque CONFIRMAR', 12, 196);
+  } else if (st.k === 'AGENDADA') {
+    g.fillText('Partida escalonada (rede das 4 máquinas)', 12, 130);
+    g.font = 'bold 30px system-ui'; g.fillStyle = '#fff'; g.fillText(`inicia em ${ms(Math.max(0, (st.at - t) * K))}`, 12, 172);
+  } else if (st.k === 'DINAMIZANDO' || st.k === 'PAUSA') {
     const u = st.k === 'DINAMIZANDO' ? (t - c.mix[0]) / (c.mix[1] - c.mix[0]) : st.k === 'PAUSA' ? 1 : 0;
     const rest = (1 - u) * R.MIX_REAL * K;
     g.font = 'bold 44px system-ui'; g.fillStyle = '#fff'; g.fillText(ms(rest), 12, 150);
@@ -222,15 +261,21 @@ function drawIHM(m, mn, t) {
   } else if (st.k === 'FECHANDO' || st.k === 'ABRINDO') {
     const [a, b] = st.k === 'FECHANDO' ? c.fecha : c.abre; bar(130, (t - a) / (b - a), '#3d8bfd');
   } else {
-    g.fillText('Garrafões posicionados · portas fechadas', 12, 130); g.fillText('Toque INICIAR CICLO', 12, 154);
+    g.fillText('Garrafões posicionados · portas fechadas', 12, 130); g.fillText(mn === 'M1' ? 'Toque PARTIDA ESCALONADA' : 'Toque INICIAR CICLO', 12, 154);
   }
-  g.fillStyle = '#1f7a4a'; g.fillRect(250, 204, 140, 28); g.fillStyle = '#fff'; g.font = 'bold 14px system-ui'; g.fillText('INICIAR CICLO', 268, 223);
+  if (st.k !== 'PIPETAR' && st.k !== 'VALIDANDO') {
+    const bl = st.k === 'PRONTA' && mn === 'M1' ? 'PARTIDA ESCALONADA' : 'INICIAR CICLO';
+    g.fillStyle = '#1f7a4a'; g.fillRect(222, 204, 168, 28); g.fillStyle = '#fff'; fitFont(g, bl, 156, 14); g.fillText(bl, 230, 223);
+  } else {
+    const ok = pipCount(c, t) === 6;
+    g.fillStyle = ok ? '#1f7a4a' : '#3a4854'; g.fillRect(250, 212, 140, 24); g.fillStyle = '#fff'; g.font = 'bold 14px system-ui'; g.fillText('CONFIRMAR', 278, 229);
+  }
   m.tex.needsUpdate = true;
   // torre
   const blink = Math.floor(t * 2.5) % 2 === 0;
-  const auto = ['FECHANDO', 'DOSANDO', 'ATIVO_LINHA', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO'].includes(st.k);
+  const auto = ['FECHANDO', 'DOSANDO', 'VALIDANDO', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO'].includes(st.k);
   if (m.tower.verde) m.tower.verde.visible = auto;
-  if (m.tower.amarelo) m.tower.amarelo.visible = (st.k === 'ATIVO_MANUAL' && blink) || ['PRONTA', 'FIM_CICLO', 'CONCLUIDO'].includes(st.k);
+  if (m.tower.amarelo) m.tower.amarelo.visible = (st.k === 'PIPETAR' && blink) || ['PRONTA', 'AGENDADA', 'FIM_CICLO', 'CONCLUIDO'].includes(st.k);
   if (m.tower.vermelho) m.tower.vermelho.visible = false;
 }
 
@@ -247,14 +292,14 @@ function drawTV(t) {
     g.fillStyle = COLOR[st.k]; g.fillRect(x, y, 300, 8);
     g.fillStyle = '#fff'; g.font = 'bold 30px system-ui'; g.fillText(mn, x + 14, y + 46);
     g.font = '18px system-ui'; g.fillStyle = '#9fb0bf'; g.fillText(`ciclo ${st.n || 0}/2`, x + 200, y + 42);
-    g.fillStyle = COLOR[st.k]; g.font = 'bold 21px system-ui'; g.fillText(LABEL[st.k], x + 14, y + 84);
+    g.fillStyle = COLOR[st.k]; fitFont(g, LABEL[st.k], 272, 21); g.fillText(LABEL[st.k], x + 14, y + 84);
     g.fillStyle = '#cfe0ee'; g.font = '18px system-ui';
     if (c) {
       const el = ((c.end !== undefined && t >= c.end ? c.end : t) - c.start) * K;
       g.fillText(`tempo no ciclo: ${ms(el)}`, x + 14, y + 118);
       if (st.k === 'DINAMIZANDO') g.fillText(`mistura: ${ms(Math.max(0, (c.mix[1] - t) * K))} restante`, x + 14, y + 146);
-      if (st.k === 'ATIVO_MANUAL') g.fillText(`aguardando operador: ${ms((t - c.ready) * K)}`, x + 14, y + 146);
-    } else g.fillText('aguardando início', x + 14, y + 118);
+      if (st.k === 'PIPETAR') g.fillText(`pipetagem: ${pipCount(c, t)}/6 · ${ms((t - c.ready) * K)}`, x + 14, y + 146);
+    } else g.fillText(st.k === 'AGENDADA' ? `partida em ${ms(Math.max(0, (st.at - t) * K))}` : 'aguardando início', x + 14, y + 118);
     const mine = P.done.filter((d) => d.mn === mn);
     g.fillStyle = '#9fb0bf'; g.font = '17px system-ui';
     g.fillText(`concluídos: ${mine.map((d) => 'C' + d.n + ' ' + ms(d.dur)).join('  ') || '—'}`, x + 14, y + 176);
@@ -270,7 +315,7 @@ function drawTV(t) {
     const x = 20 + i * 312, y = 296;
     g.fillStyle = '#16212c'; g.fillRect(x, y, 300, 110);
     g.fillStyle = '#9fb0bf'; g.font = '19px system-ui'; g.fillText(a, x + 14, y + 32);
-    g.fillStyle = col; g.font = 'bold 40px system-ui'; g.fillText(b, x + 14, y + 84);
+    g.fillStyle = col; fitFont(g, b, 272, 40); g.fillText(b, x + 14, y + 84);
   });
   // meta do dia
   const y = 424;
@@ -298,7 +343,32 @@ function drawTV(t) {
     g.fillStyle = 'rgba(15,81,50,.92)'; g.fillRect(340, 300, 600, 90);
     g.fillStyle = '#fff'; g.font = 'bold 30px system-ui'; g.fillText('TRANSFERÊNCIA → SALA DE TANQUES', 362, 356);
   }
+  if (R.cafe && t >= R.cafe.tv0 && t < R.cafe.tv1) drawCafe(g, W_, H_, t);
   TVs.tex.needsUpdate = true;
+}
+
+function drawCafe(g, W_, H_, t) {                          // PAUSA DO CAFÉ (depois volta aos indicadores finais)
+  const u = t - R.cafe.tv0;
+  const gr = g.createLinearGradient(0, 0, 0, H_); gr.addColorStop(0, '#4a2a14'); gr.addColorStop(1, '#1d120a');
+  g.fillStyle = gr; g.fillRect(0, 0, W_, H_);
+  g.save(); g.translate(W_ / 2, 300);
+  // xícara
+  g.fillStyle = '#f4efe8'; g.beginPath(); g.moveTo(-120, -40); g.lineTo(120, -40); g.lineTo(95, 110); g.quadraticCurveTo(0, 140, -95, 110); g.closePath(); g.fill();
+  g.strokeStyle = '#f4efe8'; g.lineWidth = 22; g.beginPath(); g.arc(135, 25, 45, -Math.PI / 2, Math.PI / 2); g.stroke();
+  g.fillStyle = '#6b3b1c'; g.beginPath(); g.ellipse(0, -40, 118, 20, 0, 0, 7); g.fill();
+  g.fillStyle = '#e8e1d6'; g.beginPath(); g.ellipse(0, 140, 190, 22, 0, 0, 7); g.fill();
+  // vapor
+  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 10; g.lineCap = 'round';
+  for (let k = -1; k <= 1; k++) {
+    g.beginPath();
+    for (let y = 0; y < 150; y += 6) { const x = k * 55 + 16 * Math.sin(y / 22 + u * 3 + k); if (y === 0) g.moveTo(x, -70 - y); else g.lineTo(x, -70 - y); }
+    g.stroke();
+  }
+  g.restore();
+  g.textAlign = 'center'; g.fillStyle = '#ffd89a'; g.font = 'bold 92px system-ui,sans-serif'; g.fillText('PAUSA DO CAFÉ', W_ / 2, 560);
+  g.fillStyle = '#f4efe8'; g.font = '34px system-ui,sans-serif'; g.fillText('O café chegou! · 15 min · lote concluído e transferido', W_ / 2, 616);
+  g.font = 'bold 30px system-ui'; g.fillText(hms(simT(t)), W_ / 2, 680);
+  g.textAlign = 'left';
 }
 
 function drawClock(t) {
@@ -358,6 +428,10 @@ function makeSounds() {
   S.chime = buf(1.2, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.35) * Math.sin(2 * Math.PI * 880 * t) + (t > 0.18 ? Math.exp(-(t - 0.18) / 0.45) * Math.sin(2 * Math.PI * 1318.5 * t) : 0); } norm(d, 0.5); });
   S.steps = [0, 1, 2, 3].map((k) => buf(0.14, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / (0.018 + 0.004 * k)) * rnd() * 0.8 + Math.exp(-t / 0.03) * Math.sin(2 * Math.PI * (85 + 10 * k) * t); } lp(d, 0.35 + 0.05 * k); norm(d, 0.7); }));
   S.dooro = buf(1.0, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = (t < 0.05 ? Math.exp(-t / 0.008) * rnd() : 0) + 0.25 * Math.sin(Math.PI * Math.min(t / 1.0, 1)) * rnd(); } lp(d, 0.08); norm(d, 0.6); });
+  // apito de juiz (apito de ervilha): portadora ~3 kHz com trinado de ~28 Hz
+  S.apito = buf(0.75, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; const tr = 0.5 + 0.5 * Math.sin(2 * Math.PI * 28 * t);
+    const f = 2950 + 220 * tr; const env = Math.min(1, t / 0.02) * Math.min(1, (0.75 - t) / 0.06);
+    d[i] = env * ((0.55 + 0.45 * tr) * Math.sin(2 * Math.PI * f * t + 0.8 * Math.sin(2 * Math.PI * 28 * t)) + 0.12 * rnd()); } norm(d, 0.9); });
   S.doorc = buf(0.5, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.05) * Math.sin(2 * Math.PI * 75 * t) + 0.6 * Math.exp(-t / 0.01) * rnd(); } norm(d, 0.9); });
   return S;
 }
@@ -383,7 +457,7 @@ function initAudio() {
   audio.tpump = positional(pumpA, SND.tpump, true, 1.5); audio.tpump.play();
   audio.hvac = new THREE.Audio(listener); audio.hvac.setBuffer(SND.hvac); audio.hvac.setLoop(true); audio.hvac.setVolume(0.12); audio.hvac.play();
   audio.door = anchor(B(R.pts.door[0], R.pts.door[1], 1.2));
-  audio.tv = anchor(B(0, 7.4, 3.0));
+  audio.tv = anchor(B(0, 4.9, 3.0));
   audio.panel = anchor(B(R.pts.panel[0], R.pts.panel[1], 1.2));
   for (const n of ['OPERADORA', 'SUPERVISOR']) audio.pools[n] = [0, 1, 2, 3].map((k) => { const o = anchor(new THREE.Vector3()); return { o, a: positional(o, SND.steps[k], false, 1.0) }; });
 }
@@ -398,7 +472,9 @@ function triggerEvents(t0, t1) {
   for (const e of R.events) {
     if (e.t <= t0 || e.t > t1) continue;
     const m = e.m ? machines[e.m] : null;
-    if (e.type === 'ihm_toque' || e.type === 'botao' || e.type === 'injeta') oneShot(m.snd.mid, SND.beep, e.type === 'injeta' ? 0.35 : 0.6, 1.0);
+    if (e.type === 'ihm_toque' || e.type === 'botao' || e.type === 'pipeta') oneShot(m.snd.mid, SND.beep, e.type === 'pipeta' ? 0.3 : 0.6, 1.0);
+    else if (e.type === 'porta_maq_abre' || e.type === 'porta_maq_fecha') oneShot(m.snd.mid, SND.click, 0.8, 1.2);
+    else if (e.type === 'apito') oneShot(audio.door, SND.apito, 1.0, 5);
     else if (e.type === 'porta_abre') oneShot(audio.door, SND.dooro, 0.9);
     else if (e.type === 'porta_fecha') oneShot(audio.door, SND.doorc, 1.0);
     else if (e.type === 'ciclo_fim') { oneShot(audio.tv, SND.chime, 0.8, 4); oneShot(m.snd.mid, SND.beep, 0.6); }
@@ -406,7 +482,7 @@ function triggerEvents(t0, t1) {
     else if (e.type === 'tablet_toque') { }
   }
   // cliques de válvula nas transições de dosagem / drenagem
-  for (const mn of MN) for (const c of R.machines[mn].cycles) for (const tt of [c.dosa[0], c.dosa[1], c.dreno ? c.dreno[0] : -1, c.dreno ? c.dreno[1] : -1, c.ativo ? c.ativo[0] : -1]) {
+  for (const mn of MN) for (const c of R.machines[mn].cycles) for (const tt of [c.dosa[0], c.dosa[1], c.dreno ? c.dreno[0] : -1, c.dreno ? c.dreno[1] : -1]) {
     if (tt > t0 && tt <= t1) oneShot(machines[mn].snd.mid, SND.click, 0.7, 1.2);
   }
   for (const n of ['OPERADORA', 'SUPERVISOR']) {
@@ -426,7 +502,7 @@ function updateAudio(t, t0, playing) {
     const m = machines[mn], st = state(mn, t), k = st.k;
     const run = playing ? 1 : 0;
     setLoop(m.snd.motor, run * (k === 'DINAMIZANDO' ? 0.55 : 0));
-    setLoop(m.snd.pump, run * (k === 'DOSANDO' || k === 'ATIVO_LINHA' ? 0.35 : 0));
+    setLoop(m.snd.pump, run * (k === 'DOSANDO' ? 0.35 : 0));
     setLoop(m.snd.vac, run * (k === 'DRENANDO' ? 0.45 : 0));
     setLoop(m.snd.heads, run * (k === 'FECHANDO' || k === 'ABRINDO' ? 0.25 : 0));
     // golpes: um a cada volta da manivela
@@ -443,9 +519,10 @@ function updateAudio(t, t0, playing) {
 
 // ------------------------------------------------------------------ câmeras
 const VIEWS = {
-  geral: [B(0, -7.2, 3.7), B(0, 0.8, 0.9)],
-  m1: [B(1.0, -5.4, 1.75), B(2.9, -3.2, 1.3)],
-  tv: [B(0, 1.8, 1.7), B(0, 7.4, 2.9)],
+  geral: [B(-0.6, -4.75, 3.3), B(0.2, 1.0, 1.3)],
+  m1: [B(0.9, -4.3, 1.8), B(3.0, -2.4, 1.3)],
+  bocais: [B(1.95, -2.9, 1.95), B(2.95, -2.32, 1.33)],
+  tv: [B(0, 0.8, 1.7), B(0, 4.9, 2.9)],
   tanque: [B(2.0, -2.6, 1.8), B(0.1, 0.0, 1.0)],
 };
 let camMode = 'geral';
@@ -512,7 +589,7 @@ renderer.xr.addEventListener('sessionstart', () => {
     scene.background = null; shell.forEach((o) => { o.visible = false; });
     listener.setMasterVolume(XR.scale < 1 ? 0.45 : 1);
     XR.placed = false; setTimeout(() => { if (!XR.placed) placeHere(); }, 1500);
-  } else { rig.position.copy(B(0.0, -5.6, 0)); rig.rotation.set(0, 0, 0); }
+  } else { rig.position.copy(B(0.0, -4.2, 0)); rig.rotation.set(0, 0, 0); }
   initAudio(); if (!st.playing) togglePlay();
 });
 renderer.xr.addEventListener('sessionend', () => {
@@ -578,10 +655,10 @@ function drawFases(t) {
 let last = performance.now(), acc = 0, prevT = 0;
 function update(t, dt, playing) {
   mixS.setTime(Math.min(t, gs.animations[0].duration - 1e-3));
-  for (const mn of MN) { const m = machines[mn]; m.act.time = clipTime(m.R, t).c; m.mixer.update(0); }
+  for (const mn of MN) { const m = machines[mn]; m.act.time = clipTime(m.R, t).c; m.mixer.update(0); updateMachineProps(m, mn, t); }
   for (const n in people) {
     const p = people[n]; if (!p.a) continue;
-    const vis = n !== 'SUPERVISOR' || (t >= R.sup_window[0] - 0.5 && t <= R.sup_window[1] + 0.3);
+    const vis = n !== 'SUPERVISOR' || R.sup_windows.some(([a, b]) => t >= a - 0.5 && t <= b + 0.3);
     p.a.visible = vis; p.blob.visible = vis;
     if (vis) { p.a.getWorldPosition(tmpV); world.worldToLocal(tmpV); p.blob.position.set(tmpV.x, 0.004, tmpV.z); }
   }
