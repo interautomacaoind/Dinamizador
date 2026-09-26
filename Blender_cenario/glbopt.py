@@ -107,6 +107,8 @@ def optimize(src, dst, tol_rot=0.0015, tol_pos=0.0015, tol_scl=0.002, jpeg_q=86)
     for an in j.get('animations', []):
         for s in an['samplers']: s['input'] = amap[s['input']]; s['output'] = amap[s['output']]
     used_bv = set(a['bufferView'] for a in newacc if 'bufferView' in a) | set(im['bufferView'] for im in j.get('images', []) if 'bufferView' in im)
+    for a in newacc:                                   # acessores esparsos (chaves de forma): índices e valores
+        if 'sparse' in a: used_bv |= {a['sparse']['indices']['bufferView'], a['sparse']['values']['bufferView']}
     vmap = {}; newbv = []; out = bytearray()
     for i, v in enumerate(bv):
         if i not in used_bv: continue
@@ -117,6 +119,9 @@ def optimize(src, dst, tol_rot=0.0015, tol_pos=0.0015, tol_scl=0.002, jpeg_q=86)
         out += d; vmap[i] = len(newbv); newbv.append(nv)
     for a in newacc:
         if 'bufferView' in a: a['bufferView'] = vmap[a['bufferView']]
+        if 'sparse' in a:
+            a['sparse']['indices']['bufferView'] = vmap[a['sparse']['indices']['bufferView']]
+            a['sparse']['values']['bufferView'] = vmap[a['sparse']['values']['bufferView']]
     for im in j.get('images', []):
         if 'bufferView' in im: im['bufferView'] = vmap[im['bufferView']]
     while len(out) % 4: out.append(0)

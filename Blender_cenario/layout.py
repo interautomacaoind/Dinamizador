@@ -1,28 +1,30 @@
-# Layout da sala (coordenadas Blender: x = largura 10 m, y = comprimento 15 m, z para cima)
+# Layout da sala (coordenadas Blender: x = largura 10 m, y = comprimento 10 m, z para cima) — REV17: sala 10 x 10 m
 import math
 import numpy as np
 
-RX, RY, RH = 5.0, 7.5, 4.5
-K_SIM = 6.0                       # tempo simulado = 6 x tempo real
+RX, RY, RH = 5.0, 5.0, 4.5
+K_SIM = 3.0                       # tempo simulado = 3 x tempo real (ações humanas em ritmo realista)
 SIM_T0 = 7 * 3600.0               # 07:00:00
 
 # máquinas: (nome, x, y, rotação em graus) — frente das máquinas voltada para o corredor central
-MACH = [('M1', 3.30, -3.00, -90.0), ('M2', 3.30, 2.50, -90.0), ('M3', -3.30, 2.50, 90.0), ('M4', -3.30, -3.00, 90.0)]
-MB = (-0.86, 1.09, -0.66, 0.66)   # caixa local da máquina (com estação e quadro)
+MACH = [('M1', 3.30, -2.30, -90.0), ('M2', 3.30, 2.30, -90.0), ('M3', -3.30, 2.30, 90.0), ('M4', -3.30, -2.30, 90.0)]
+MB = (-0.72, 1.09, -0.66, 0.66)   # caixa local da máquina (com quadro) — sem estação lateral no REV17
 
 IHM_L = (0.875, -0.6265, 1.50)
 BTN_INI_L = (0.79, -0.622, 1.30)
-PORT0_L = (-0.785, -0.395, 1.086)  # funil P1 (y cresce 0,058 por porta)
-PORT_DY = 0.058
-BTN_INJ_L = (-0.80, -0.06, 1.074)
+# bocais de pipetagem (topo do bocal com o cabeçote FECHADO sobre o garrafão): P1–P3 frente, P4–P6 traseira
+Z_BOCAL = 1.862 - 0.512
+PORTS_L = [(-0.402, -0.34, Z_BOCAL), (0.018, -0.34, Z_BOCAL), (0.438, -0.34, Z_BOCAL),
+           (-0.402, 0.34, Z_BOCAL), (0.018, 0.34, Z_BOCAL), (0.438, 0.34, Z_BOCAL)]
+DOOR_PLANE = 0.60                 # portas frontal/traseira em y = -/+0,60 (local)
 STUB_L = {'BASE': (0.86, 0.22), 'PRODUTO': (0.86, 0.42)}
 
 DOOR = dict(x0=3.00, x1=4.20, y=-RY, h=2.20)          # porta de entrada (canto frontal direito)
 TANK = dict(x=0.0, y=0.0, r=0.42, z0=0.55, z1=1.55)   # tanque de passagem 250 L
 PANEL = dict(x=0.95, y=-0.75)                          # pedestal do botão de transferência
 PUMP = dict(x=-0.75, y=-0.55)
-TABLES = [dict(x=0.0, y=-4.3, w=1.8, d=0.8), dict(x=0.0, y=4.3, w=1.8, d=0.8)]
-BENCH_FRASCOS = dict(x0=-4.3, x1=-1.3, y0=-RY, y1=-RY + 0.70, z=0.90)
+TABLES = [dict(x=0.45, y=-3.95, w=1.6, d=0.7), dict(x=0.0, y=2.75, w=1.6, d=0.7)]
+BENCH_FRASCOS = dict(x0=-3.0, x1=-0.9, y0=-RY, y1=-RY + 0.70, z=0.90)
 BENCH_TORNEIRAS = dict(x0=-2.0, x1=2.0, y0=RY - 0.70, y1=RY, z=0.90)
 TV = dict(x=0.0, y=RY - 0.06, zc=3.05, w=2.10, h=1.20)
 CLOCK = dict(x=0.0, y=-RY + 0.04, zc=3.20, r=0.20)
@@ -50,13 +52,14 @@ def machine_points(m):
     left = rot((-1, 0), r)                   # normal da lateral esquerda (estação)
     ihm = to_world(m, IHM_L)
     stand_ihm = (ihm[0] + front[0] * 0.46, ihm[1] + front[1] * 0.46)
-    ports = [to_world(m, (PORT0_L[0], PORT0_L[1] + k * PORT_DY, PORT0_L[2])) for k in range(6)]
-    pc = np.mean([p[:2] for p in ports], 0)
-    edge = to_world(m, (-0.84, -0.25, 0))
-    stand_inj = (edge[0] + left[0] * 0.40, edge[1] + left[1] * 0.40)
-    return dict(ihm=ihm, btn=to_world(m, BTN_INI_L), front=front, left=left, stand_ihm=stand_ihm,
-                face_ihm=heading_of((-front[0], -front[1])), ports=ports, btn_inj=to_world(m, BTN_INJ_L),
-                stand_inj=stand_inj, face_inj=heading_of((-left[0], -left[1])),
+    ports = [to_world(m, p) for p in PORTS_L]
+    back = (-front[0], -front[1])
+    # posição de trabalho em cada porta (frente / traseira): 0,32 m fora do plano da porta, no eixo do garrafão do meio
+    stand_f = to_world(m, (0.018, -DOOR_PLANE - 0.32)); stand_b = to_world(m, (0.018, DOOR_PLANE + 0.32))
+    return dict(ihm=ihm, btn=to_world(m, BTN_INI_L), front=front, back=back, left=left, stand_ihm=stand_ihm,
+                face_ihm=heading_of((-front[0], -front[1])), ports=ports,
+                stand_f=stand_f, face_f=heading_of(back), stand_b=stand_b, face_b=heading_of(front),
+                door_f=to_world(m, (0.0, -DOOR_PLANE)), door_b=to_world(m, (0.0, DOOR_PLANE)),
                 stubs={k: to_world(m, v) for k, v in STUB_L.items()})
 
 
@@ -189,8 +192,8 @@ def sample_path(pts, step=0.02, corner=0.45):
 
 if __name__ == '__main__':
     for k, v in MP.items():
-        print(k, 'IHM', np.round(v['stand_ihm'], 2), round(math.degrees(v['face_ihm'])), 'INJ', np.round(v['stand_inj'], 2), round(math.degrees(v['face_inj'])), 'stub', v['stubs'])
-    p = plan((3.6, -8.2), MP['M1']['stand_ihm'])
-    print(np.round(p, 2))
-    p = plan(MP['M1']['stand_inj'], MP['M2']['stand_inj'])
-    print(np.round(p, 2))
+        print(k, 'IHM', np.round(v['stand_ihm'], 2), 'F', np.round(v['stand_f'], 2), 'B', np.round(v['stand_b'], 2), 'stub', v['stubs'])
+    for a, b in [((3.6, -RY - 1.6), MP['M1']['stand_ihm']), (MP['M1']['stand_f'], MP['M1']['stand_b']), (MP['M1']['stand_b'], MP['M1']['stand_ihm']),
+                 (MP['M1']['stand_ihm'], MP['M2']['stand_b']), (MP['M4']['stand_ihm'], MP['M1']['stand_b'])]:
+        p = plan(a, b); L = sum(math.dist(p[i], p[i + 1]) for i in range(len(p) - 1))
+        print(np.round(p, 2).tolist(), 'L=%.2f' % L)

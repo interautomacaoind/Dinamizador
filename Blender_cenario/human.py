@@ -175,6 +175,28 @@ def coat_weights(d, F, V3, ao):
     return SI, SW
 
 
+BODY_USED = {}
+
+
+def add_expression(tag, name, units, mix=(('caucasian', 0.7), ('african', 0.3))):
+    """chave de forma (morph target) a partir das unidades de expressão do MakeHuman (CC0)"""
+    body, used = BODY_USED[tag]
+    D = np.zeros((len(BV), 3))
+    for unit, w in units.items():
+        for eth, we in mix:
+            key = f'targets/expression/units/{eth}/{unit}'
+            idx = NPZ[key + '.index'].astype(int); vec = NPZ[key + '.vector'].astype(float) * 1e-3
+            D[idx] += w * we * vec
+    D3 = np.stack([D[:, 0], -D[:, 2], D[:, 1]], 1) * 0.1
+    if not body.data.shape_keys: body.shape_key_add(name='Basis', from_mix=False)
+    sk = body.shape_key_add(name=name, from_mix=False)
+    for nv, v in enumerate(used):
+        if D3[v].any():
+            sk.data[nv].co = body.data.vertices[nv].co + Vector(D3[v])
+    sk.value = 0.0
+    return sk
+
+
 def build_human(tag, targets, skin_png, coat_png, pants_png, shoes_png, top_rgb, eye='brown', glasses=False,
                 eyebrow='eyebrow001', inflate_coat=0.004):
     V = morph(targets)
@@ -218,7 +240,8 @@ def build_human(tag, targets, skin_png, coat_png, pants_png, shoes_png, top_rgb,
         elif any(LEG_RE.match(d) for d in ds) and not any(SKIN_RE.match(d) for d in ds): mats_by.append(2)
         else: mats_by.append(1)
     mpants = img_mat(tag + ' calca', None, rough=0.85, tint=pants_png)
-    body, _ = build_obj(tag + ' corpo', V3, BFACES, BUV, (si, sw), mats_by, [mskin, mtop, mpants], ao)
+    body, used_b = build_obj(tag + ' corpo', V3, BFACES, BUV, (si, sw), mats_by, [mskin, mtop, mpants], ao)
+    BODY_USED[tag] = (body, used_b)
     objs = [body]
     # ---------------- proxies
     def add_proxy(label, path, mat, inflate=0.0):

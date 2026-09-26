@@ -1,4 +1,4 @@
-# Sala de dinamização 10 x 15 m, pé-direito 4,5 m
+# Sala de dinamização 10 x 10 m (REV17), pé-direito 4,5 m
 import bpy, math, sys, os
 sys.path.insert(0, '/home/claude/rev15'); sys.path.insert(0, '/home/claude/sala')
 from lib import mat, empty, box, cyl, cbox, boxes, lathe, pipe, text, torus, sphere, bake, ramp
@@ -125,16 +125,16 @@ def build_room():
         box(f'Junta forro y {y:.2f}', -RX, RX, y - 0.006, y + 0.006, RH - 0.004, RH, ALU, G)
     # ------------------------------------------------ luminárias LED de sobrepor (hermética p/ sala limpa)
     for x in (-2.5, 0.0, 2.5):
-        for y in (-6.0, -3.0, 0.0, 3.0, 6.0):
+        for y in (-3.75, -1.25, 1.25, 3.75):
             cbox(f'Luminaria {x} {y} corpo', x - 0.62, x + 0.62, y - 0.32, y + 0.32, RH - 0.07, RH, ALU, G, 0.01)
             box(f'Luminaria {x} {y} difusor', x - 0.585, x + 0.585, y - 0.285, y + 0.285, RH - 0.075, RH - 0.07, LED, G)
     # difusores de ar
-    for (x, y) in [(-1.25, -5.0), (1.25, -5.0), (-1.25, 1.5), (1.25, 1.5), (0, 5.2)]:
+    for (x, y) in [(-1.25, -2.5), (1.25, -2.5), (-1.25, 2.5), (1.25, 2.5)]:
         for k in range(4):
             s = 0.30 - k * 0.065
             cbox(f'Difusor ar {x} {y} anel {k}', x - s, x + s, y - s, y + s, RH - 0.02 - k * 0.012, RH - k * 0.012, BRANCO, G, 0.004)
     # grelhas de retorno baixas
-    for y in (-5.5, 0.0, 5.5):
+    for y in (-3.6, 0.0, 3.6):
         for sx in (-1, 1):
             xx = sx * RX
             cbox(f'Grelha retorno {sx} {y}', xx - 0.02 if sx > 0 else xx, xx if sx > 0 else xx + 0.02, y - 0.3, y + 0.3, 0.25, 0.55, BRANCO, G, 0.004)
@@ -227,7 +227,7 @@ def build_room():
         cyl(f'Torneira {c} valvula', 0.022, bt['z'] + 0.18, bt['z'] + 0.25, (c, yb), 'Z', INOXP, G, seg=16)
         cyl(f'Torneira {c} anel azul', 0.0135, bt['z'] + 0.26, bt['z'] + 0.28, (c, yb), 'Z', AZUL, G, seg=16)
         TAPS.append((c, yb))
-    sign('torneira', 'placa_torneira.png', 0.0, RY - 0.004, bt['z'] + 0.42, 0.80, 0.20, '-y')
+    sign('torneira', 'placa_torneira.png', 0.0, RY - 0.004, bt['z'] + 0.45, 1.00, 0.25, '-y')
     # alguns béqueres na bancada
     for (x, dy) in [(-1.6, 0.35), (-1.45, 0.35), (1.55, 0.30)]:
         lathe(f'Bequer {x}', [(0.0, bt['z']), (0.035, bt['z']), (0.036, bt['z'] + 0.10), (0.039, bt['z'] + 0.105), (0.033, bt['z'] + 0.10), (0.032, bt['z'] + 0.004), (0.0, bt['z'] + 0.004)], (x, wy + s * dy, 0), VIDRO, G, seg=24)
@@ -235,35 +235,33 @@ def build_room():
     bf = BENCH_FRASCOS
     wy2, fy2, s2 = bancada('Bancada frascos', bf)
     zt = bf['z']
-    cbox('Bandeja inox frascos', -4.15, -2.95, wy2 + s2 * 0.12, wy2 + s2 * 0.52, zt, zt + 0.02, INOX, G, 0.004)
+    # REV17: frascos de 1 L (30 mL por garrafão) e pipetas sorológicas de 50 mL com pipetador elétrico
+    cbox('Caixa luvas', -2.95, -2.72, wy2 + s2 * 0.08, wy2 + s2 * 0.22, zt, zt + 0.09, mat('Caixa luvas', (0.2, 0.45, 0.8), 0.0, 0.6), G, 0.004)
+    cbox('Bandeja inox frascos', -2.68, -1.98, wy2 + s2 * 0.12, wy2 + s2 * 0.50, zt, zt + 0.02, INOX, G, 0.004)
     FLASKS = []
-    prof = [(0.0, 0.0), (0.030, 0.0), (0.031, 0.004), (0.031, 0.095), (0.027, 0.108), (0.016, 0.118), (0.013, 0.122), (0.013, 0.13), (0.0, 0.13)]
-    for i in range(8):
-        for j in range(3):
-            x = -4.07 + i * 0.14; y = wy2 + s2 * (0.19 + j * 0.13)
+    prof = [(0.0, 0.0), (0.048, 0.0), (0.050, 0.006), (0.050, 0.150), (0.042, 0.172), (0.020, 0.190), (0.017, 0.196), (0.017, 0.214), (0.0, 0.214)]
+    for i in range(3):
+        for j in range(2):
+            x = -2.58 + i * 0.12; y = wy2 + s2 * (0.22 + j * 0.16)
             FLASKS.append((x, y))
-    FLASK_PICK = (-2.55, wy2 + s2 * 0.40)            # frasco já separado na frente da bancada
+    FLASK_PICK = (-1.55, wy2 + s2 * 0.40)
     for (x, y) in FLASKS:
-        lathe(f'Frasco ambar 200 mL {x:.2f} {y:.2f}', prof, (x, y, zt + 0.02), AMBAR, G, seg=20)
-        cyl(f'Tampa frasco {x:.2f} {y:.2f}', 0.0145, zt + 0.02 + 0.122, zt + 0.02 + 0.145, (x, y), 'Z', TAMPA, G, seg=16)
+        lathe(f'Frasco ambar 1 L {x:.2f} {y:.2f}', prof, (x, y, zt + 0.02), AMBAR, G, seg=24)
+        cyl(f'Tampa frasco {x:.2f} {y:.2f}', 0.019, zt + 0.02 + 0.212, zt + 0.02 + 0.240, (x, y), 'Z', TAMPA, G, seg=16)
     ROT = tmat('Rotulo frasco', 'rotulo_frasco.png', 0.6)
-    # suporte de pipetas
-    cbox('Suporte pipetas base', -2.36, -1.99, wy2 + s2 * 0.40, wy2 + s2 * 0.50, zt, zt + 0.03, BRANCO, G, 0.004)
-    cbox('Suporte pipetas regua', -2.36, -1.99, wy2 + s2 * 0.43, wy2 + s2 * 0.47, zt + 0.16, zt + 0.18, BRANCO, G, 0.004)
-    for k in range(6):
-        x = -2.33 + k * 0.05
-        cyl(f'Pipeta rack {k}', 0.0035, zt + 0.02, zt + 0.30, (x, wy2 + s2 * 0.45), 'Z', VIDRO, G, seg=8)
-        cyl(f'Pera pipeta rack {k}', 0.009, zt + 0.30, zt + 0.34, (x, wy2 + s2 * 0.45), 'Z', mat('Pera borracha azul', (0.1, 0.25, 0.7), 0.0, 0.6), G, seg=10)
-    PIPETTE_PICK = (-2.10, wy2 + s2 * 0.58)
-    cyl('Suporte individual pipeta base', 0.03, zt, zt + 0.012, PIPETTE_PICK, 'Z', BRANCO, G, seg=20)
-    torus('Suporte individual pipeta anel', 0.008, 0.002, (PIPETTE_PICK[0], PIPETTE_PICK[1], zt + 0.06), 'Z', BRANCO, G, seg=12, mseg=4)
-    cyl('Suporte individual pipeta haste', 0.003, zt + 0.012, zt + 0.06, (PIPETTE_PICK[0] + 0.012, PIPETTE_PICK[1]), 'Z', BRANCO, G, seg=8)
-    cbox('Prancheta', -1.85, -1.55, wy2 + s2 * 0.25, wy2 + s2 * 0.60, zt, zt + 0.01, mat('Prancheta', (0.35, 0.22, 0.10), 0.0, 0.6), G, 0.003)
-    box('Folha prancheta', -1.83, -1.57, wy2 + s2 * 0.27, wy2 + s2 * 0.57, zt + 0.01, zt + 0.012, BRANCO, G)
-    cbox('Caixa luvas', -3.35, -3.05, wy2 + s2 * 0.05, wy2 + s2 * 0.18, zt, zt + 0.09, mat('Caixa luvas', (0.2, 0.45, 0.8), 0.0, 0.6), G, 0.004)
+    # suporte de pipetas sorológicas 50 mL (embaladas) e base do pipetador
+    cbox('Suporte pipetas base', -1.92, -1.70, wy2 + s2 * 0.15, wy2 + s2 * 0.30, zt, zt + 0.03, BRANCO, G, 0.004)
+    cbox('Suporte pipetas regua', -1.92, -1.70, wy2 + s2 * 0.20, wy2 + s2 * 0.25, zt + 0.26, zt + 0.28, BRANCO, G, 0.004)
+    PLAST = mat('Pipeta sorologica plastico', (0.85, 0.92, 0.96), 0.0, 0.2, alpha=0.6)
+    for k in range(5):
+        x = -1.89 + k * 0.042
+        cyl(f'Pipeta sorologica rack {k}', 0.008, zt + 0.02, zt + 0.44, (x, wy2 + s2 * 0.225), 'Z', PLAST, G, seg=10)
+    PIPETTE_PICK = (-1.15, wy2 + s2 * 0.42)
+    cbox('Base pipetador', -1.25, -1.05, wy2 + s2 * 0.34, wy2 + s2 * 0.52, zt, zt + 0.02, BRANCO, G, 0.004)
+    cbox('Prancheta', -1.02, -0.93, wy2 + s2 * 0.12, wy2 + s2 * 0.40, zt, zt + 0.01, mat('Prancheta', (0.35, 0.22, 0.10), 0.0, 0.6), G, 0.003)
     # lixeira de pedal
-    cyl('Lixeira inox', 0.15, 0.0, 0.62, (-1.0, wy2 + s2 * 0.35), 'Z', INOX, G, seg=28)
-    cyl('Lixeira tampa', 0.152, 0.62, 0.64, (-1.0, wy2 + s2 * 0.35), 'Z', INOXP, G, seg=28)
+    cyl('Lixeira inox', 0.15, 0.0, 0.62, (-3.25, wy2 + s2 * 0.35), 'Z', INOX, G, seg=28)
+    cyl('Lixeira tampa', 0.152, 0.62, 0.64, (-3.25, wy2 + s2 * 0.35), 'Z', INOXP, G, seg=28)
     # ------------------------------------------------ mesas de inox
     for k, t in enumerate(TABLES):
         x0, x1, y0, y1 = t['x'] - t['w'] / 2, t['x'] + t['w'] / 2, t['y'] - t['d'] / 2, t['y'] + t['d'] / 2
@@ -298,7 +296,7 @@ def build_room():
     NIV = empty('TANQUE_NIVEL', (vx, vy, 0.86), G)
     cyl('Visor nivel produto', 0.010, 0.86, 1.44, (vx, vy), 'Z', mat('Produto no visor', (0.55, 0.75, 0.92), 0.0, 0.1, alpha=0.75), NIV, seg=12)
     NIV.scale = (1, 1, 0.001)
-    sign('tanque', 'placa_tanque.png', tx_, ty_ - R - 0.004, 1.20, 0.42, 0.18, '-y')
+    sign('tanque', 'placa_tanque.png', tx_, ty_ - R - 0.004, 1.20, 0.40, 0.19, '-y')
     # saída inferior, válvula, bomba de transferência
     px, py = PUMP['x'], PUMP['y']
     tube('Saida tanque -> bomba', [(tx_, ty_, 0.52), (tx_, ty_, 0.30), (px + 0.20, py, 0.30), (px + 0.14, py, 0.30)], 0.019, INOXP, G)
@@ -364,7 +362,7 @@ def build_room():
         xd = 1.55 if c > 0 else -1.55
         tube(f'Ramal torneira {c}', [(xd, RY - 0.30, ZMm), (xd, RY - 0.05, ZMm - 0.3), (xd, RY - 0.05, bt['z'] + 0.14), (c, RY - 0.05, bt['z'] + 0.14), (c, yb, bt['z'] + 0.14), (c, yb, bt['z'] + 0.18)], 0.0105, INOXP, G, bend=0.08)
         cyl(f'Faixa azul ramal {c}', 0.0115, 1.9, 2.05, (xd, RY - 0.05), 'Z', AZUL, G, seg=12)
-    sign('base', 'placa_base.png', 2.6, RY - 0.004, ZMm - 0.22, 0.45, 0.14, '-y')
+    sign('base', 'placa_base.png', 2.6, RY - 0.004, ZMm - 0.24, 0.72, 0.176, '-y')
     # produto: máquinas -> tanque de passagem (por cima)
     for sx in (-1, 1):
         ms = [m for m in MACH if (m[1] > 0) == (sx > 0)]

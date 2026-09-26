@@ -26,27 +26,40 @@ human.add_cap(opA, V3a, 'OPERADORA')
 spA, _, V3b = human.build_human('SUPERVISOR', human.MALE, MHD + 'skins/middleage_caucasian_male/textures/middleage_lightskinned_male_diffuse.png',
                                 TEX + 'jaleco.png', (0.05, 0.055, 0.06), TEX + 'sapato_preto.png', (0.30, 0.40, 0.55), eye='brown', eyebrow='eyebrow002')
 human.add_cap(spA, V3b, 'SUPERVISOR', rgb=(0.35, 0.55, 0.85))
+# REV17: sorriso da operadora (unidades de expressão MakeHuman) para a pausa do café
+SMILE = human.add_expression('OPERADORA', 'SORRISO', {'mouth-corner-puller': 1.0, 'mouth-upward-retraction': 0.35, 'mouth-part-later': 0.25,
+                                                      'eye-left-slit': 0.35, 'eye-right-slit': 0.35, 'eyebrows-left-extern-up': 0.2, 'eyebrows-right-extern-up': 0.2})
 print('humanos OK', round(time.time() - T0))
 
 # ------------------------------------------------ objetos de mão
 G = R['G']
 M_ = R['mats']
-FRASCO = empty('FRASCO_OPERADORA', (0, 0, 0), G)
-prof = [(0.0, 0.0), (0.030, 0.0), (0.031, 0.004), (0.031, 0.095), (0.027, 0.108), (0.016, 0.118), (0.013, 0.122), (0.013, 0.13), (0.0, 0.13)]
-lathe('Frasco operadora vidro', prof, (0, 0, 0), M_['AMBAR'], FRASCO, seg=24)
-cyl('Frasco operadora tampa aberta', 0.0145, 0.13, 0.131, (0.0, 0.0), 'Z', M_['TAMPA'], FRASCO, seg=16)
-rot_ = cyl('Frasco operadora rotulo', 0.0312, 0.03, 0.085, (0, 0), 'Z', M_['ROT'], FRASCO, seg=24)
-_me = rot_.data; _ul = _me.uv_layers.new(); _uv = []
-for _p in _me.polygons:
-    for _li in _p.loop_indices:
-        _co = _me.vertices[_me.loops[_li].vertex_index].co
-        _uv += [(math.atan2(_co.y, _co.x) / (2 * math.pi)) % 1.0, (_co.z - 0.03) / 0.055]
-_ul.data.foreach_set('uv', _uv)
+prof = [(0.0, 0.0), (0.048, 0.0), (0.050, 0.006), (0.050, 0.150), (0.042, 0.172), (0.020, 0.190), (0.017, 0.196), (0.017, 0.214), (0.0, 0.214)]
+def flask_prop(name):
+    F = empty(name, (0, 0, 0), G)
+    lathe(name + ' vidro ambar 1 L', prof, (0, 0, 0), M_['AMBAR'], F, seg=28)
+    cyl(name + ' boca aberta', 0.0175, 0.214, 0.216, (0.0, 0.0), 'Z', M_['TAMPA'], F, seg=16)
+    rot_ = cyl(name + ' rotulo', 0.0503, 0.04, 0.13, (0, 0), 'Z', M_['ROT'], F, seg=28)
+    _me = rot_.data; _ul = _me.uv_layers.new(); _uv = []
+    for _p in _me.polygons:
+        for _li in _p.loop_indices:
+            _co = _me.vertices[_me.loops[_li].vertex_index].co
+            _uv += [(math.atan2(_co.y, _co.x) / (2 * math.pi)) % 1.0, (_co.z - 0.04) / 0.09]
+    _ul.data.foreach_set('uv', _uv)
+    return F
+FRASCO = flask_prop('FRASCO_OPERADORA')
+FRASCO2 = flask_prop('FRASCO_OPERADORA_2')
+# pipetador elétrico (mão) + pipeta sorológica 50 mL; ponta a 0,42 m da mão (eixo -Z do objeto)
 PIPETA = empty('PIPETA_OPERADORA', (0, 0, 0), G)
-VP = mat('Vidro pipeta', (0.80, 0.90, 0.95), 0.0, 0.05, alpha=0.55)
-cyl('Pipeta vidro graduada', 0.0040, -0.15, 0.0, (0, 0), 'Z', VP, PIPETA, seg=10)
-cyl('Pipeta ponta', 0.0020, -0.18, -0.15, (0, 0), 'Z', VP, PIPETA, seg=8)
-lathe('Pipeta pera', [(0.0, 0.0), (0.007, 0.0), (0.014, 0.02), (0.015, 0.04), (0.011, 0.06), (0.0, 0.068)], (0, 0, 0), mat('Pera borracha azul', (0.1, 0.25, 0.7), 0.0, 0.6), PIPETA, seg=16)
+AZP = mat('Pipetador azul', (0.08, 0.30, 0.72), 0.1, 0.45)
+cyl('Pipetador empunhadura', 0.017, -0.045, 0.075, (0, 0), 'Z', AZP, PIPETA, seg=16)
+cbox('Pipetador gatilhos', 0.012, 0.030, -0.008, 0.008, -0.02, 0.05, mat('Pipetador gatilho cinza', (0.55, 0.57, 0.6), 0.0, 0.5), PIPETA, 0.003)
+cyl('Pipetador bocal', 0.011, -0.075, -0.045, (0, 0), 'Z', mat('Pipetador bocal branco', (0.9, 0.9, 0.9), 0.0, 0.4), PIPETA, seg=14)
+VP = mat('Pipeta sorologica 50 mL', (0.86, 0.93, 0.97), 0.0, 0.08, alpha=0.5)
+cyl('Pipeta sorologica 50 mL', 0.0078, -0.395, -0.075, (0, 0), 'Z', VP, PIPETA, seg=12)
+cyl('Pipeta ponta', 0.0030, -0.42, -0.395, (0, 0), 'Z', VP, PIPETA, seg=8, r2=0.0078)
+for k in range(6):
+    cyl(f'Pipeta graduacao {k}', 0.0080, -0.36 + k * 0.05, -0.358 + k * 0.05, (0, 0), 'Z', mat('Graduacao preta', (0.05, 0.05, 0.05), 0.0, 0.5), PIPETA, seg=12)
 TABLET = empty('TABLET_SUPERVISOR', (0, 0, 0), G)
 cbox('Tablet corpo', -0.125, 0.125, -0.085, 0.085, -0.004, 0.004, mat('Tablet grafite', (0.08, 0.08, 0.09), 0.4, 0.4), TABLET, 0.006)
 from PIL import Image, ImageDraw, ImageFont
@@ -439,6 +452,7 @@ print('dedos OK', round(time.time() - T0))
 # ------------------------------------------------ objetos animados (frasco, pipeta, tablet, porta, nível, lâmpada)
 def prop_track(track, hands, samples, kind):
     out = []
+    tilt = PL['pip_tilt']
     for i, smp in enumerate(samples):
         t = smp['t']; act = track[0]
         for e in track:
@@ -447,24 +461,33 @@ def prop_track(track, hands, samples, kind):
         if act['mode'] == 'hand':
             h = hands[act['side']][i]
             if kind == 'frasco':
-                pos = (h[0] + f[0] * 0.035, h[1] + f[1] * 0.035, h[2] - 0.085); rot = (0, 0, 0)
+                pos = (h[0] + f[0] * 0.035, h[1] + f[1] * 0.035, h[2] - 0.16); q = Quaternion()
             else:
-                pos = (h[0] + f[0] * 0.03, h[1] + f[1] * 0.03, h[2] - 0.035); rot = (0, 0, 0)
+                pos = (h[0], h[1], h[2])
+                d = Vector((f[0] * math.sin(tilt), f[1] * math.sin(tilt), -math.cos(tilt)))
+                q = Vector((0, 0, -1)).rotation_difference(d) @ Quaternion((0, 0, 1), smp['psi'])
         elif act['mode'] == 'fixed_flat':
-            pos = act['pos']; rot = (math.pi / 2, 0, 0.3)
+            pos = act['pos']; q = Euler((math.pi / 2, 0, 0.3), 'XYZ').to_quaternion()
         else:
-            pos = act['pos']; rot = (0, 0, 0)
-        out.append((pos, rot))
+            pos = act['pos']; q = Quaternion()
+        out.append((pos, q))
     return out
 
 
 samp, hands, _, _ = ANIMDATA['OPERADORA']
-for obj, key, kind in ((FRASCO, 'FRASCO', 'frasco'), (PIPETA, 'PIPETA', 'pipeta')):
+for obj, key, kind in ((FRASCO, 'FRASCO', 'frasco'), (FRASCO2, 'FRASCO2', 'frasco'), (PIPETA, 'PIPETA', 'pipeta')):
     tr = prop_track(PL['props'][key], hands, samp, kind)
-    obj.rotation_mode = 'XYZ'
-    for c in range(3):
-        bake(obj, 'location', c, [float(p[c]) for p, r in tr])
-        bake(obj, 'rotation_euler', c, [float(r[c]) for p, r in tr])
+    obj.rotation_mode = 'QUATERNION'
+    qs = [q for p, q in tr]
+    for i in range(1, len(qs)):
+        if qs[i].dot(qs[i - 1]) < 0: qs[i] = -qs[i]
+    for c in range(3): bake(obj, 'location', c, [float(p[c]) for p, q in tr])
+    for c in range(4): bake(obj, 'rotation_quaternion', c, [q[c] for q in qs])
+# sorriso (chave de forma animada)
+for (ts, w) in PL['actors']['OPERADORA']['smile']:
+    SMILE.value = 0.0; SMILE.keyframe_insert('value', frame=int(ts * FPS))
+    SMILE.value = w; SMILE.keyframe_insert('value', frame=int((ts + 0.7) * FPS))
+    SMILE.value = w; SMILE.keyframe_insert('value', frame=NF - 1)
 samp, hands, _, _ = ANIMDATA['SUPERVISOR']
 tl, tr_ = [], []
 for i, smp in enumerate(samp):
@@ -507,7 +530,9 @@ BAKE = ['upperleg01', 'upperleg02', 'lowerleg01', 'lowerleg02', 'foot', 'upperar
 store = {tag: {f'{b}.{s}': [] for b in BAKE for s in 'LR'} for tag in RIG}
 for f in range(NF):
     scn.frame_set(f)
-    for tag, (ao, I, E) in RIG.items():
+    dg = bpy.context.evaluated_depsgraph_get()
+    for tag, (ao0, I, E) in RIG.items():
+        ao = ao0.evaluated_get(dg)            # REV17: lê a pose avaliada (módulo bpy não devolve a pose ao original)
         for bn in store[tag]:
             pbn = ao.pose.bones[bn]; b = pbn.bone
             if pbn.parent:
@@ -555,7 +580,7 @@ open(path, 'wb').write(b'glTF' + struct.pack('<I', 2) + struct.pack('<I', 12 + l
 # ------------------------------------------------ roteiro para a página
 WEB = dict(T_END=T_END, K=PL['K'], SIM_T0=PL['SIM_T0'], VOL_CICLO=PL['VOL_CICLO'], MIX_REAL=PL['MIX_REAL'],
            machines=PL['machines'], doors=PL['doors'], events=PL['events'], tank=PL['tank'][::4], transfer=PL['transfer'],
-           steps=STEPS, sup_window=PL['sup_window'],
+           steps=STEPS, sup_windows=PL['sup_windows'], cafe=PL['cafe'], STAGGER=PL['STAGGER'],
            pts=dict(door=[(DOOR['x0'] + DOOR['x1']) / 2, -RY], tank=[TANK['x'], TANK['y']], panel=[PANEL['x'], PANEL['y']], pump=[PUMP['x'], PUMP['y']],
                     ihm={k: v['ihm'] for k, v in MP.items()}))
 json.dump(WEB, open('/home/claude/sala/web/assets/roteiro.json', 'w'), default=float)

@@ -59,9 +59,15 @@ Image.fromarray((img * 255).astype(np.uint8), 'RGBA').save(T + 'sombra_red.png')
 def placa(name, w, h, lines, bg, fg, border=None, icon=None):
     im = Image.new('RGB', (w, h), bg); d = ImageDraw.Draw(im)
     if border: d.rectangle([6, 6, w - 7, h - 7], outline=border, width=8)
-    y = h * 0.12
+    fit = []
     for (txt, sz, bold) in lines:
         f = ImageFont.truetype(FB if bold else FR, sz)
+        while d.textlength(txt, font=f) > w * 0.90 and sz > 10:     # REV17: reduz a fonte até caber (nada cortado)
+            sz -= 2; f = ImageFont.truetype(FB if bold else FR, sz)
+        fit.append((txt, sz, f))
+    tot = sum(sz * 1.25 for _, sz, _ in fit) - fit[-1][1] * 0.25
+    y = (h - tot) / 2 - fit[0][1] * 0.08                              # centraliza na vertical
+    for (txt, sz, f) in fit:
         tw = d.textlength(txt, font=f)
         d.text(((w - tw) / 2, y), txt, font=f, fill=fg); y += sz * 1.25
     im.save(T + name)
@@ -71,12 +77,12 @@ placa('placa_epi.png', 600, 800, [('USO OBRIGATÓRIO', 50, True), ('', 20, False
                                  ('SAPATO FECHADO', 44, True), ('', 30, False), ('Sala de Dinamização', 34, False), ('Área controlada', 34, False)],
       (18, 84, 160), (255, 255, 255), (255, 255, 255))
 placa('placa_sala.png', 900, 260, [('SALA DE DINAMIZAÇÃO 01', 64, True), ('Produção – 4 dinamizadoras CMR', 40, False)], (235, 238, 240), (25, 40, 60), (25, 40, 60))
-placa('placa_tanque.png', 700, 300, [('TANQUE DE PASSAGEM TQ-01', 52, True), ('Inox 316L – 250 L', 40, False), ('Produto dinamizado', 40, False)], (240, 240, 240), (20, 30, 40), (0, 120, 60))
+placa('placa_tanque.png', 700, 330, [('TANQUE DE PASSAGEM', 56, True), ('TQ-01', 64, True), ('Inox 316L – 250 L · Produto dinamizado', 34, False)], (240, 240, 240), (20, 30, 40), (0, 120, 60))
 placa('placa_saida.png', 600, 220, [('SAÍDA', 110, True)], (0, 140, 70), (255, 255, 255))
 placa('placa_transf.png', 700, 220, [('→ SALA DE TANQUES', 62, True), ('Transferência de produto', 40, False)], (0, 120, 60), (255, 255, 255))
-placa('placa_base.png', 700, 220, [('SOLUÇÃO BASE', 70, True), ('Alimentação das máquinas', 40, False)], (20, 90, 180), (255, 255, 255))
+placa('placa_base.png', 900, 220, [('SOLUÇÃO HIDROALCOÓLICA 20%', 66, True), ('Alimentação das máquinas', 40, False)], (20, 90, 180), (255, 255, 255))
 placa('placa_prod.png', 700, 220, [('PRODUTO → TQ-01', 70, True), ('Descarga das máquinas', 40, False)], (0, 120, 60), (255, 255, 255))
-placa('placa_torneira.png', 800, 200, [('SOLUÇÃO BASE – PONTO DE COLETA', 48, True), ('Mesma linha das máquinas', 36, False)], (240, 240, 240), (20, 90, 180), (20, 90, 180))
+placa('placa_torneira.png', 1000, 250, [('SOLUÇÃO HIDROALCOÓLICA 20%', 60, True), ('Ponto de coleta · mesma linha das máquinas', 38, False)], (240, 240, 240), (20, 90, 180), (20, 90, 180))
 for k in range(1, 5):
     placa(f'placa_m{k}.png', 400, 240, [(f'M{k}', 150, True)], (25, 40, 60), (255, 255, 255))
 
@@ -84,8 +90,8 @@ for k in range(1, 5):
 im = Image.new('RGB', (512, 256), (250, 250, 245)); d = ImageDraw.Draw(im)
 d.rectangle([0, 0, 511, 40], fill=(0, 110, 60))
 d.text((14, 6), 'ATIVO – TINTURA-MÃE', font=ImageFont.truetype(FB, 26), fill=(255, 255, 255))
-d.text((14, 60), 'Lote 26-0925   200 mL', font=ImageFont.truetype(FR, 30), fill=(30, 30, 30))
-d.text((14, 110), 'Uso: 1 mL por garrafão', font=ImageFont.truetype(FR, 28), fill=(30, 30, 30))
+d.text((14, 60), 'Lote 26-0925   1 L', font=ImageFont.truetype(FR, 30), fill=(30, 30, 30))
+d.text((14, 110), 'Uso: 30 mL por garrafão', font=ImageFont.truetype(FR, 28), fill=(30, 30, 30))
 d.rectangle([14, 170, 300, 230], outline=(30, 30, 30), width=3)
 im.save(T + 'rotulo_frasco.png')
 
