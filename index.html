@@ -26,6 +26,8 @@
   #clk { font-variant-numeric:tabular-nums; min-width:210px; color:var(--mu); }
   #clk b { color:var(--tx); }
   #vrslot { display:flex; } #vrslot button { position:static !important; transform:none !important; left:auto !important; bottom:auto !important; }
+  #optoast, #artoast { display:none; position:fixed; left:50%; top:78px; transform:translateX(-50%); max-width:86vw; color:#fff; padding:10px 16px; border-radius:12px; font-weight:600; z-index:25; text-align:center; }
+  #artoast { top:auto; bottom:84px; position:absolute; }
   #arui { display:none; position:fixed; inset:0; pointer-events:none; z-index:30; font:15px/1.35 system-ui,sans-serif; }
   #armsg { position:absolute; left:50%; top:max(14px, env(safe-area-inset-top)); transform:translateX(-50%); max-width:88vw; text-align:center; background:rgba(18,24,32,.78); color:#fff; padding:9px 14px; border-radius:12px; }
   #arbtns { position:absolute; left:0; right:0; bottom:max(18px, env(safe-area-inset-bottom)); display:none; justify-content:center; gap:10px; flex-wrap:wrap; pointer-events:auto; }
@@ -46,6 +48,7 @@
   <div id="fases"></div>
 </div>
 <div id="bar">
+  <select id="modo" title="Modo"><option value="assistir">Assistir</option><option value="operar">Operar</option></select>
   <button id="play" title="Reproduzir/pausar (espaço)">▶</button>
   <select id="spd" title="Velocidade"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
   <input id="seek" type="range" min="0" max="100" step="0.1" value="0">
@@ -56,7 +59,7 @@
   </select>
   <button id="snd" class="on" title="Som">🔊</button>
   <span id="vrslot"></span>
-  <small style="color:#9fb0bf;flex-basis:100%">AR no celular: aponte para o piso até aparecer o marcador branco, toque para posicionar; depois 1 dedo arrasta, 2 dedos giram (maquete: pinça muda a escala), botão Reposicionar · AR no Quest: aponte e aperte o gatilho (ou pinça da mão) para posicionar; segure o gatilho para arrastar, analógico dir. gira, X reposiciona · VR: analógico esq. anda, dir. gira · A = play/pausa · B = velocidade · Desktop: arraste para girar, roda do mouse aproxima</small>
+  <small style="color:#9fb0bf;flex-basis:100%">Modo Operar: clique/toque na IHM, portas e bocais (Quest: gatilho clica; clique na pipeta para pegar, gatilho com a ponta no frasco aspira e no bocal dispensa; grip devolve; Y avança) · AR no celular: aponte para o piso até aparecer o marcador branco, toque para posicionar; depois 1 dedo arrasta, 2 dedos giram (maquete: pinça muda a escala), botão Reposicionar · AR no Quest: aponte e aperte o gatilho (ou pinça da mão) para posicionar; segure o gatilho para arrastar, analógico dir. gira, X reposiciona · VR: analógico esq. anda, dir. gira · A = play/pausa · B = velocidade · Desktop: arraste para girar, roda do mouse aproxima</small>
 </div>
 <script type="module" src="./app.js"></script>
 </body>

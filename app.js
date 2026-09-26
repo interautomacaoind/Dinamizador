@@ -7,6 +7,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = (id) => document.getElementById(id);
 const R = await (await fetch('assets/roteiro.json')).json();
+const OPMODE = new URLSearchParams(location.search).get('modo') === 'operar';   // etapa 3: modo Operar
+let OP = null;
 const B = (x, y, z = 0) => new THREE.Vector3(x, z, -y);          // Blender (z para cima) -> three (y para cima)
 const K = R.K, T_END = R.T_END;
 const MN = ['M1', 'M2', 'M3', 'M4'];
@@ -140,7 +142,7 @@ function theta(c) {                                           // ângulo da mani
   return 4 * Math.PI + W * (c - 25);
 }
 
-const EV_PARTIDA = R.events.find((e) => e.type === 'partida_escalonada');
+let EV_PARTIDA = R.events.find((e) => e.type === 'partida_escalonada');
 function curCycle(mn, t) { let c = null; for (const x of R.machines[mn].cycles) if (t >= x.start) c = x; return c; }
 function pipCount(c, t) { return c ? Object.values(c.pip).filter((v) => v <= t).length : 0; }
 function state(mn, t) {
@@ -193,6 +195,7 @@ function updateMachineProps(m, mn, t) {
 }
 
 function tankVol(t) {
+  if (OP) return OP.tankVol(t);
   const T = R.tank; if (t <= T[0][0]) return T[0][1];
   for (let i = 1; i < T.length; i++) if (t < T[i][0]) { const u = (t - T[i - 1][0]) / (T[i][0] - T[i - 1][0]); return T[i - 1][1] + u * (T[i][1] - T[i - 1][1]); }
   return T[T.length - 1][1];
@@ -203,7 +206,7 @@ function production(t) {
   done.sort((a, b) => a.end - b.end);
   const vol = done.length * R.VOL_CICLO;
   const avg = done.length ? done.reduce((a, b) => a + b.dur, 0) / done.length : null;
-  const starts = MN.map((m) => R.machines[m].cycles[0].start);
+  const starts = MN.map((m) => (R.machines[m].cycles[0] || { start: Infinity }).start);
   const t0 = Math.min(...starts);
   const all2 = done.length === 8 ? (Math.max(...done.map((d) => d.end)) - t0) * K : null;
   const meta = avg ? Math.floor(8 * 3600 / avg) * 4 * R.VOL_CICLO : null;
@@ -270,16 +273,21 @@ function drawIHM(m, mn, t) {
     const ok = pipCount(c, t) === 6;
     g.fillStyle = ok ? '#1f7a4a' : '#3a4854'; g.fillRect(250, 212, 140, 24); g.fillStyle = '#fff'; g.font = 'bold 14px system-ui'; g.fillText('CONFIRMAR', 278, 229);
   }
+  if (OP && OP.msg[mn] && t < OP.msg[mn].until) {              // aviso / erro do modo Operar
+    const M_ = OP.msg[mn]; g.fillStyle = M_.err ? '#b3261e' : '#1f4d7a'; g.fillRect(0, 160, 400, 44);
+    g.fillStyle = '#fff'; fitFont(g, M_.text, 384, 15); g.fillText(M_.text, 8, 188);
+  }
   m.tex.needsUpdate = true;
   // torre
   const blink = Math.floor(t * 2.5) % 2 === 0;
   const auto = ['FECHANDO', 'DOSANDO', 'VALIDANDO', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO'].includes(st.k);
   if (m.tower.verde) m.tower.verde.visible = auto;
   if (m.tower.amarelo) m.tower.amarelo.visible = (st.k === 'PIPETAR' && blink) || ['PRONTA', 'AGENDADA', 'FIM_CICLO', 'CONCLUIDO'].includes(st.k);
-  if (m.tower.vermelho) m.tower.vermelho.visible = false;
+  if (m.tower.vermelho) m.tower.vermelho.visible = !!(OP && OP.msg[mn] && OP.msg[mn].err && t < OP.msg[mn].until && blink);
 }
 
 function drawTV(t) {
+  if (OP && OP.done) { OP.drawReport(TVs.ctx, 1280, 731, t); TVs.tex.needsUpdate = true; return; }
   const g = TVs.ctx, W_ = 1280, H_ = 731, P = production(t);
   g.fillStyle = '#0c131b'; g.fillRect(0, 0, W_, H_);
   g.fillStyle = '#0f5132'; g.fillRect(0, 0, W_, 70);
@@ -432,6 +440,7 @@ function makeSounds() {
   S.apito = buf(0.75, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; const tr = 0.5 + 0.5 * Math.sin(2 * Math.PI * 28 * t);
     const f = 2950 + 220 * tr; const env = Math.min(1, t / 0.02) * Math.min(1, (0.75 - t) / 0.06);
     d[i] = env * ((0.55 + 0.45 * tr) * Math.sin(2 * Math.PI * f * t + 0.8 * Math.sin(2 * Math.PI * 28 * t)) + 0.12 * rnd()); } norm(d, 0.9); });
+  S.erro = buf(0.55, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; const f = t < 0.25 ? 440 : 330; d[i] = (t % 0.25 < 0.2 ? 1 : 0) * (Math.sign(Math.sin(2 * Math.PI * f * t)) * 0.5 + 0.5 * Math.sin(2 * Math.PI * f * t)); } lp(d, 0.4); norm(d, 0.6); });
   S.doorc = buf(0.5, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.05) * Math.sin(2 * Math.PI * 75 * t) + 0.6 * Math.exp(-t / 0.01) * rnd(); } norm(d, 0.9); });
   return S;
 }
@@ -475,6 +484,7 @@ function triggerEvents(t0, t1) {
     if (e.type === 'ihm_toque' || e.type === 'botao' || e.type === 'pipeta') oneShot(m.snd.mid, SND.beep, e.type === 'pipeta' ? 0.3 : 0.6, 1.0);
     else if (e.type === 'porta_maq_abre' || e.type === 'porta_maq_fecha') oneShot(m.snd.mid, SND.click, 0.8, 1.2);
     else if (e.type === 'apito') oneShot(audio.door, SND.apito, 1.0, 5);
+    else if (e.type === 'erro') oneShot(m ? m.snd.mid : audio.panel, SND.erro, 0.9, 2);
     else if (e.type === 'porta_abre') oneShot(audio.door, SND.dooro, 0.9);
     else if (e.type === 'porta_fecha') oneShot(audio.door, SND.doorc, 1.0);
     else if (e.type === 'ciclo_fim') { oneShot(audio.tv, SND.chime, 0.8, 4); oneShot(m.snd.mid, SND.beep, 0.6); }
@@ -573,7 +583,7 @@ footprint.visible = false; world.add(footprint);
 const rays = [0, 1].map((i) => {
   const c = renderer.xr.getController(i);
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }));
-  line.scale.z = 4; c.add(line); scene.add(c); return c;
+  line.scale.z = 4; c.add(line); rig.add(c); return c;
 });
 // interface sobre a câmera (dom-overlay, Android)
 const arui = document.createElement('div'); arui.id = 'arui';
@@ -639,6 +649,7 @@ function confirmPlace() {
 function screenTouches() { return [...XR.active.keys()].filter((s) => s.targetRayMode === 'screen'); }
 function onSelectStart(e) {
   if (XR.mode !== 'ar') return;
+  if (OP && XR.state === 'placed' && OP.xrSelect(e)) return;          // modo Operar: toque/gatilho em algo clicável
   const s = e.inputSource; XR.active.set(s, { t: performance.now() });
   if (XR.state !== 'placed') return;
   const tl = screenTouches();
@@ -727,6 +738,11 @@ renderer.xr.addEventListener('sessionstart', () => {
     arui.style.display = 'block'; startPlacing();
   } else { rig.position.copy(B(0.0, -4.2, 0)); rig.rotation.set(0, 0, 0); }
   rays.forEach((c) => { c.visible = true; });
+  if (OP) {
+    const ses = renderer.xr.getSession();
+    if (XR.mode !== 'ar') ses.addEventListener('selectstart', (e) => OP.xrSelect(e));
+    ses.addEventListener('squeezestart', (e) => OP.xrSqueeze(e));
+  }
   initAudio(); if (!st.playing) togglePlay(); uiState();
 });
 renderer.xr.addEventListener('sessionend', () => {
@@ -757,6 +773,9 @@ function xrInput(dt) {
       const x = gp.buttons[4] && gp.buttons[4].pressed;                  // X: reposicionar
       if (ar && x && !btnPrev.x) startPlacing();
       btnPrev.x = x;
+      const y = gp.buttons[5] && gp.buttons[5].pressed;                  // Y: avançar (modo Operar)
+      if (OP && y && !btnPrev.y) OP.skip();
+      btnPrev.y = y;
     } else if (src.handedness === 'right') {
       snapCool -= dt;
       if (ar) {
@@ -786,6 +805,13 @@ $('snd').onclick = () => { initAudio(); audio.on = !audio.on; $('snd').classList
 addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); initAudio(); togglePlay(); } });
 controls.addEventListener('start', () => { if (camMode === 'operadora' || camMode === 'supervisor') { camMode = 'livre'; $('cam').value = 'livre'; } });
 $('lt').textContent = 'pronto';
+$('modo').value = OPMODE ? 'operar' : 'assistir';
+$('modo').onchange = (e) => { location.search = e.target.value === 'operar' ? '?modo=operar' : ''; };
+if (OPMODE) {
+  $('start').textContent = '▶ Operar (você é a operadora)';
+  document.querySelector('#top small').textContent = 'MODO OPERAR · clique na IHM da M1 → PARTIDA ESCALONADA · abra as portas, pipete P1–P6, feche e CONFIRMAR · ⏩ avança o tempo';
+  setView('m1');
+}
 $('start').style.display = 'block';
 $('start').onclick = () => { $('load').remove(); initAudio(); togglePlay(); };
 
@@ -794,14 +820,339 @@ function drawFases(t) {
     + `<div><b>TQ</b><i style="background:#19b3c9"></i><span>${tankVol(t).toFixed(1).replace('.', ',')} L no tanque de passagem</span></div>`;
 }
 
+// ------------------------------------------------------------------ MODO OPERAR (etapa 3): você é a operadora
+// Máquina de estados ao vivo (as mesmas fases do roteiro), 4 máquinas com partida escalonada, tempo 3× com "avançar".
+// Interações: IHM (PARTIDA ESCALONADA / INICIAR / CONFIRMAR), portas frente/traseira (intertravadas), bocais P1–P6,
+// botão TRANSFERIR do TQ-01. Pipetagem: no Quest, pegar a pipeta, aspirar no frasco e levar a ponta ao bocal;
+// no celular/PC, tocar no bocal com a porta aberta. Relatório de treinamento na TV no final.
+if (OPMODE) {
+  const S = (sim) => sim / K;
+  const D = { FECHA: S(8), DOSA: S(40), PASSA: 0.3, MIX: S(300), PAUSA: S(5), DRENO: S(35), ABRE: S(8), RESTART: S(6), STAGGER: S(120), TRANSF: S(90) };
+  const NLOOP = 12;
+  // zera o roteiro gravado: tudo passa a ser gerado pelas suas ações
+  for (const mn of MN) { R.machines[mn].cycles = []; R.machines[mn].segments = []; }
+  R.events = []; R.tank = [[0, 0]]; R.transfer = { t: 1e9, t0: 1e9, t1: 0 }; R.cafe = null; R.sup_windows = []; R.steps = { OPERADORA: [], SUPERVISOR: [] };
+  EV_PARTIDA = null;
+  mixS.setTime(0);
+  for (const n of ['OPERADORA', 'SUPERVISOR', 'TABLET_SUPERVISOR', 'FRASCO_OPERADORA_2']) { const o = sala.getObjectByName(n); if (o) o.visible = false; }
+  const pipObj = sala.getObjectByName('PIPETA_OPERADORA'), flaskObj = sala.getObjectByName('FRASCO_OPERADORA');
+  const nivel = sala.getObjectByName('TANQUE_NIVEL'), lampT = sala.getObjectByName('LAMPADA_TRANSF');
+  const ev = (type, extra = {}) => R.events.push({ t: st.t + 0.001, type, ...extra });
+  OP = { errors: [], alerts: [], msg: {}, pip: { holder: null, loaded: 0 }, hover: null, done: false };
+
+  function newCycle(mn, start, auto = false) {
+    const C = R.machines[mn].cycles;
+    const c = { n: C.length + 1, start, auto, pip: {}, tampas: {}, portas: [] };
+    c.fecha = [start + 0.3, start + 0.3 + D.FECHA]; c.dosa = [c.fecha[1], c.fecha[1] + D.DOSA]; c.ready = c.dosa[1];
+    C.push(c); segs(mn); ev('ciclo_inicio', { m: mn, n: c.n }); return c;
+  }
+  function runCycle(mn, c, t) {
+    c.run = t; const m0 = t + D.PASSA;
+    c.mix = [m0, m0 + D.MIX]; c.pausa = [c.mix[1], c.mix[1] + D.PAUSA]; c.dreno = [c.pausa[1], c.pausa[1] + D.DRENO];
+    c.abre = [c.dreno[1], c.dreno[1] + D.ABRE]; c.end = c.abre[1]; segs(mn);
+    R.events.push({ t: c.end, type: 'ciclo_fim', m: mn, n: c.n });
+  }
+  function segs(mn) {
+    const out = [];
+    for (const c of R.machines[mn].cycles) {
+      out.push([c.fecha[0], c.fecha[1], 2, 6, 0], [c.dosa[0], c.dosa[1], 6, 15.5, 0]);
+      if (c.run === undefined) continue;
+      const [m0, m1] = c.mix;
+      out.push([c.run, c.run + D.PASSA, 15.5, 23, 0], [m0, m0 + 2, 23, 25, 0], [m0 + 2, m1 - 2, 25, 25 + 8 * NLOOP, 8], [m1 - 2, m1, 33, 35, 0],
+        [c.pausa[0], c.pausa[1], 35, 37, 0], [c.dreno[0], c.dreno[1], 37, 47, 0], [c.abre[0], c.abre[1], 47, 51.5, 0]);
+    }
+    R.machines[mn].segments = out;
+  }
+  const cur = (mn) => { const C = R.machines[mn].cycles; return C[C.length - 1] || null; };
+  const openSide = (c, lado) => c && c.portas.some(([l, a, b]) => l === lado && b === Infinity);
+  function say(mn, text, err = false, alert = false) {
+    OP.msg[mn] = { text, err, until: st.t + 3.5 };
+    OP.toast = { text: (MN.includes(mn) ? mn + ' · ' : '') + text, err: err || alert, until: performance.now() + 3800 };
+    if (err) { OP.errors.push({ t: st.t, mn, text }); ev('erro', { m: mn }); }
+    else if (alert) { OP.alerts.push({ t: st.t, mn, text }); ev('erro', { m: mn }); }
+  }
+  const PHASE = { FECHANDO: 'fechando cabeçotes', DOSANDO: 'dosando', VALIDANDO: 'validando', DINAMIZANDO: 'dinamizando', PAUSA: 'estabilizando', DRENANDO: 'drenando', ABRINDO: 'abrindo cabeçotes', AGENDADA: 'partida programada' };
+
+  // ---------------- ações
+  function actIHM(mn) {
+    const t = st.t, s = state(mn, t), c = cur(mn);
+    ev('ihm_toque', { m: mn });
+    if (!c && s.k === 'PRONTA') {
+      if (mn === 'M1' && MN.every((x) => !cur(x))) {          // partida escalonada das 4 máquinas
+        MN.forEach((x, k) => newCycle(x, t + 0.2 + k * D.STAGGER));
+        EV_PARTIDA = { t, type: 'partida_escalonada' }; ev('botao', { m: mn });
+        say(mn, 'Partida escalonada: M1 agora, M2 +2:00, M3 +4:00, M4 +6:00');
+      } else { newCycle(mn, t + 0.2); ev('botao', { m: mn }); say(mn, 'Ciclo iniciado'); }
+      return;
+    }
+    if (s.k === 'PIPETAR') {
+      const miss = [1, 2, 3, 4, 5, 6].filter((k) => c.pip['P' + k] === undefined);
+      if (miss.length) return say(mn, `CONFIRMAR recusado: sem registro em ${miss.map((k) => 'P' + k).join(', ')}`, true);
+      if (openSide(c, 'F') || openSide(c, 'T')) return say(mn, 'CONFIRMAR recusado: feche as portas', true);
+      ev('botao', { m: mn }); runCycle(mn, c, t); return say(mn, '6/6 registros OK · mistura liberada');
+    }
+    say(mn, s.k === 'AGENDADA' ? `Partida programada: inicia em ${ms(Math.max(0, (s.at - t) * K))}` : `Máquina em operação (${PHASE[s.k] || s.k.toLowerCase()})`);
+  }
+  function actDoor(mn, lado) {
+    const t = st.t, s = state(mn, t), c = cur(mn);
+    const nome = lado === 'F' ? 'frente' : 'traseira';
+    if (c && openSide(c, lado)) {                             // fechar sempre pode
+      const e = c.portas.find(([l, a, b]) => l === lado && b === Infinity); e[2] = t;
+      ev('porta_maq_fecha', { m: mn, lado }); return;
+    }
+    if (!['PIPETAR', 'PRONTA', 'CONCLUIDO', 'FIM_CICLO'].includes(s.k)) return say(mn, `Porta ${nome} travada: máquina ${PHASE[s.k] || 'em operação'}`, false, true);
+    if (!c) return say(mn, 'Garrafões já posicionados · inicie pela IHM');
+    c.portas.push([lado, t, Infinity]); ev('porta_maq_abre', { m: mn, lado });
+  }
+  function dispense(mn, k, viaPipeta) {
+    const t = st.t, s = state(mn, t), c = cur(mn), key = 'P' + k, lado = k <= 3 ? 'F' : 'T';
+    if (s.k !== 'PIPETAR') return say(mn, s.k === 'DOSANDO' || s.k === 'FECHANDO' ? 'Aguarde: máquina ainda dosando' : 'Pipetagem fora da etapa', false, true);
+    if (!openSide(c, lado)) return say(mn, `Abra a porta ${lado === 'F' ? 'da frente' : 'traseira'} para pipetar ${key}`, false, true);
+    if (c.pip[key] !== undefined) return say(mn, `Dose dupla em ${key}! (já registrado)`, true);
+    if (viaPipeta && OP.pip.loaded < 30) return say(mn, 'Pipeta vazia: aspire 30 mL no frasco', true);
+    c.tampas[key] = [t, t + (viaPipeta ? 1.4 : 1.2)]; c.pip[key] = t + 0.5; OP.pip.loaded = 0;
+    R.events.push({ t: t + 0.5, type: 'pipeta', m: mn, p: k });
+    const n = Object.keys(c.pip).length; say(mn, n < 6 ? `${key} registrado pelo sensor (${n}/6)` : '6/6 registrados · feche as portas e toque CONFIRMAR');
+  }
+  function actTransfer() {
+    const t = st.t, v = OP.tankVol(t);
+    if (t < R.transfer.t1) return say('TQ', 'Transferência em andamento');
+    if (v < 0.5) return say('TQ', 'TQ-01 vazio', false, true);
+    R.transfer = { t, t0: t + 1.5, t1: t + 1.5 + D.TRANSF, v0: v }; ev('botao_transf');
+  }
+  OP.tankVol = (t) => {
+    let v = 0;
+    for (const mn of MN) for (const c of R.machines[mn].cycles) if (c.dreno) v += R.VOL_CICLO * Math.min(Math.max((t - c.dreno[0]) / (c.dreno[1] - c.dreno[0]), 0), 1);
+    const T = R.transfer;
+    let out = OP.transferred || 0;
+    if (T.v0 !== undefined && !T.acc && t >= T.t0) { const u = Math.min((t - T.t0) / (T.t1 - T.t0), 1); out += T.v0 * u; if (u >= 1) { T.acc = true; OP.transferred = (OP.transferred || 0) + T.v0; } }
+    v -= out;
+    return Math.max(v, 0);
+  };
+
+  // ---------------- alvos clicáveis
+  const targets = [];
+  const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  function reg(obj, info) { obj.traverse((o) => { o.userData.op = info; }); targets.push(obj); }
+  for (const mn of MN) {
+    const m = machines[mn];
+    const scr = m.root.getObjectByName('IHM_TELA_IMG'); if (scr) reg(scr, { kind: 'ihm', mn });
+    for (const lado of ['F', 'T']) for (const d of m.doors[lado]) if (d) reg(d, { kind: 'porta', mn, lado });
+    m.caps.forEach((cap, i) => {
+      if (!cap) return;
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), hitMat);
+      s.position.copy(cap.position); cap.parent.add(s); reg(s, { kind: 'bocal', mn, k: i + 1 });
+    });
+  }
+  if (pipObj) reg(pipObj, { kind: 'pipeta' });
+  if (lampT) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), hitMat); lampT.getWorldPosition(s.position); world.worldToLocal(s.position); world.add(s); reg(s, { kind: 'transf' }); }
+  function label(info) {
+    const t = st.t;
+    if (info.kind === 'transf') return 'TRANSFERIR TQ-01 → sala de tanques';
+    if (info.kind === 'pipeta') return OP.pip.holder ? 'Pipeta na mão' : 'Pegar pipetador + pipeta 50 mL';
+    const s = state(info.mn, t), c = cur(info.mn);
+    if (info.kind === 'ihm') {
+      if (s.k === 'PRONTA' && !c) return info.mn === 'M1' && MN.every((x) => !cur(x)) ? 'IHM M1 · PARTIDA ESCALONADA' : `IHM ${info.mn} · INICIAR CICLO`;
+      if (s.k === 'PIPETAR') return `IHM ${info.mn} · CONFIRMAR (${pipCount(c, t)}/6)`;
+      return `IHM ${info.mn} · ${LABEL[s.k]}`;
+    }
+    if (info.kind === 'porta') return `${openSide(c, info.lado) ? 'Fechar' : 'Abrir'} porta ${info.lado === 'F' ? 'da frente (P1–P3)' : 'traseira (P4–P6)'} · ${info.mn}`;
+    if (info.kind === 'bocal') { const key = 'P' + info.k; return c && c.pip[key] !== undefined ? `${info.mn} · ${key} ✔ registrado` : `${info.mn} · bocal ${key} · pipetar 30 mL`; }
+    return '';
+  }
+  function activate(info, how) {
+    if (info.kind === 'ihm') actIHM(info.mn);
+    else if (info.kind === 'porta') actDoor(info.mn, info.lado);
+    else if (info.kind === 'transf') actTransfer();
+    else if (info.kind === 'pipeta') { if (how.src && how.src.targetRayMode === 'tracked-pointer') grabPipette(how.src); else say('', 'No celular/PC basta tocar no bocal com a porta aberta'); }
+    else if (info.kind === 'bocal') {
+      if (how.src && how.src.targetRayMode === 'tracked-pointer') { if (!OP.pip.holder) say('', 'Pegue a pipeta na bancada (gatilho na pipeta) e leve a ponta ao bocal'); return; }
+      dispense(info.mn, info.k, false);
+    }
+  }
+  const rc = new THREE.Raycaster();
+  function pick(origin, dir) {
+    rc.set(origin, dir); rc.far = 12;
+    const hs = rc.intersectObjects(targets, true);
+    for (const h of hs) { let o = h.object; while (o && !o.userData.op) o = o.parent; if (o && o.userData.op.kind === 'pipeta' && OP.pip.holder) continue; if (o && o.visible !== false) return { info: o.userData.op, point: h.point }; }
+    return null;
+  }
+  // ---------------- dica flutuante (sprite)
+  const tipCv = document.createElement('canvas'); tipCv.width = 640; tipCv.height = 96;
+  const tipTex = new THREE.CanvasTexture(tipCv); tipTex.colorSpace = THREE.SRGBColorSpace;
+  const tip = new THREE.Sprite(new THREE.SpriteMaterial({ map: tipTex, depthTest: false, transparent: true })); tip.renderOrder = 999;
+  tip.scale.set(0.42, 0.063, 1); tip.visible = false; scene.add(tip);
+  let tipText = '';
+  function showTip(text, point) {
+    if (!text || !point) { tip.visible = false; return; }
+    if (text !== tipText) {
+      tipText = text; const g = tipCv.getContext('2d'); g.clearRect(0, 0, 640, 96);
+      g.fillStyle = 'rgba(12,19,27,.88)'; g.beginPath(); g.roundRect(4, 8, 632, 80, 18); g.fill();
+      g.fillStyle = '#fff'; g.font = 'bold 34px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      let px = 34; while (g.measureText(text).width > 600 && px > 16) { px -= 2; g.font = `bold ${px}px system-ui,sans-serif`; }
+      g.fillText(text, 320, 49); tipTex.needsUpdate = true;
+    }
+    tip.position.copy(point).add(new THREE.Vector3(0, 0.12, 0)); tip.visible = true;
+  }
+  // ---------------- mouse / toque (fora do XR)
+  const cvs = renderer.domElement; let down = null;
+  const ndc = (e) => new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  const camRay = (e) => { rc.setFromCamera(ndc(e), camera); return [rc.ray.origin.clone(), rc.ray.direction.clone()]; };
+  cvs.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
+  cvs.addEventListener('pointerup', (e) => {
+    if (!down || renderer.xr.isPresenting) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null;
+    if (moved > 6) return;
+    const h = pick(...camRay(e)); if (h) { initAudio(); if (!st.playing) togglePlay(); activate(h.info, {}); }
+  });
+  cvs.addEventListener('pointermove', (e) => {
+    if (renderer.xr.isPresenting || e.buttons) return;
+    const h = pick(...camRay(e)); cvs.style.cursor = h ? 'pointer' : ''; OP.hover = h;
+  });
+  // ---------------- XR: gatilho/pinça = clicar; com a pipeta na mão = aspirar/dispensar; grip = devolver a pipeta
+  const srcOf = new Map();
+  rays.forEach((c) => { c.addEventListener('connected', (e) => { c.userData.src = e.data; }); c.addEventListener('disconnected', () => { c.userData.src = null; }); });
+  const ctrlFor = (src) => rays.find((c) => c.userData.src === src);
+  function ctrlRay(c) { const o = new THREE.Vector3().setFromMatrixPosition(c.matrixWorld); const d = new THREE.Vector3(0, 0, -1).applyQuaternion(new THREE.Quaternion().setFromRotationMatrix(c.matrixWorld)); return [o, d]; }
+  const pipHome = pipObj ? { parent: pipObj.parent, pos: pipObj.position.clone(), q: pipObj.quaternion.clone() } : null;
+  function grabPipette(src) { if (!pipObj) return; OP.pip.holder = src; OP.pip.loaded = 0; rig.add(pipObj); say('', 'Pipeta na mão: aspire 30 mL no frasco (gatilho com a ponta no frasco)'); }
+  function dropPipette() { if (!pipObj || !OP.pip.holder) return; OP.pip.holder = null; OP.pip.loaded = 0; pipHome.parent.add(pipObj); pipObj.position.copy(pipHome.pos); pipObj.quaternion.copy(pipHome.q); }
+  const tipW = () => pipObj.localToWorld(new THREE.Vector3(0, -0.42, 0));
+  function nearestBocal(p, maxd) {
+    let best = null;
+    for (const mn of MN) machines[mn].caps.forEach((cap, i) => { if (!cap) return; const w = cap.getWorldPosition(new THREE.Vector3()); const d = w.distanceTo(p); if (d < maxd && (!best || d < best.d)) best = { mn, k: i + 1, d }; });
+    return best;
+  }
+  OP.xrSelect = (e) => {
+    const src = e.inputSource;
+    if (OP.pip.holder === src && pipObj) {                    // ação com a pipeta
+      const tp = tipW();
+      const fm = flaskObj ? flaskObj.localToWorld(new THREE.Vector3(0, 0.2, 0)) : null;
+      if (fm && tp.distanceTo(fm) < 0.09) { OP.pip.loaded = 30; ev('pipeta_aspira'); say('', '30 mL aspirados · leve a ponta até o bocal'); return true; }
+      const b = nearestBocal(tp, 0.08); if (b) { dispense(b.mn, b.k, true); return true; }
+    }
+    let o, d;
+    const c = ctrlFor(src);
+    if (c && src.targetRayMode !== 'screen') [o, d] = ctrlRay(c);
+    else if (e.frame) { const p = e.frame.getPose(src.targetRaySpace, renderer.xr.getReferenceSpace()); if (!p) return false; o = new THREE.Vector3().copy(p.transform.position).applyMatrix4(rig.matrixWorld); d = new THREE.Vector3(0, 0, -1).applyQuaternion(new THREE.Quaternion().copy(p.transform.orientation)).transformDirection(rig.matrixWorld); }
+    else return false;
+    const h = pick(o, d); if (!h) return false;
+    activate(h.info, { src }); return true;
+  };
+  OP.xrSqueeze = (e) => { if (OP.pip.holder === e.inputSource) { dropPipette(); return true; } return false; };
+  OP.frame = (frame) => {
+    let hov = null;
+    if (frame && OP.pip.holder && pipObj) {                   // pipeta segue a mão (espaço do rig)
+      const sp = OP.pip.holder.gripSpace || OP.pip.holder.targetRaySpace, p = frame.getPose(sp, renderer.xr.getReferenceSpace());
+      if (p) { pipObj.position.copy(p.transform.position); pipObj.quaternion.copy(p.transform.orientation).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 3)); pipObj.scale.setScalar(1); }
+      pipObj.updateMatrixWorld(true);
+      const b = nearestBocal(tipW(), 0.1);
+      if (b) hov = { text: `${b.mn} · P${b.k} · ${OP.pip.loaded ? 'gatilho = dispensar 30 mL' : 'pipeta vazia'}`, point: tipW() };
+      else { const fm = flaskObj && flaskObj.localToWorld(new THREE.Vector3(0, 0.2, 0)); if (fm && tipW().distanceTo(fm) < 0.12) hov = { text: 'Frasco de ativo · gatilho = aspirar 30 mL', point: fm }; }
+    }
+    for (const c of rays) {
+      const src = c.userData.src; const line = c.children[0];
+      if (!src || src.targetRayMode === 'screen' || !c.visible) continue;
+      const h = pick(...ctrlRay(c));
+      if (line) line.material.color.set(h ? 0x2fbf71 : 0xffffff);
+      if (h && !hov) hov = { text: label(h.info), point: h.point };
+    }
+    showTip(hov && hov.text, hov && hov.point);
+  };
+
+  // ---------------- aviso (toast): na tela fora do XR; no XR, placa flutuante à frente da câmera
+  const toastEl = document.createElement('div'); toastEl.id = 'optoast'; document.body.appendChild(toastEl);
+  const arToast = document.createElement('div'); arToast.id = 'artoast'; arui.appendChild(arToast);
+  const tcv = document.createElement('canvas'); tcv.width = 900; tcv.height = 110;
+  const ttex = new THREE.CanvasTexture(tcv); ttex.colorSpace = THREE.SRGBColorSpace;
+  const tspr = new THREE.Sprite(new THREE.SpriteMaterial({ map: ttex, depthTest: false, transparent: true })); tspr.renderOrder = 1000;
+  tspr.scale.set(0.6, 0.073, 1); tspr.visible = false; scene.add(tspr);
+  let tlast = '';
+  function drawToast() {
+    const T = OP.toast, on = T && performance.now() < T.until;
+    toastEl.style.display = on && !renderer.xr.isPresenting ? 'block' : 'none';
+    arToast.style.display = on ? 'block' : 'none';
+    if (!on) { tspr.visible = false; return; }
+    toastEl.textContent = T.text; arToast.textContent = T.text;
+    toastEl.style.background = arToast.style.background = T.err ? 'rgba(160,30,20,.92)' : 'rgba(12,19,27,.88)';
+    if (renderer.xr.isPresenting && XR.mode !== 'ar' || (renderer.xr.isPresenting && !renderer.xr.getSession().domOverlayState)) {
+      if (tlast !== T.text + T.err) {
+        tlast = T.text + T.err; const g = tcv.getContext('2d'); g.clearRect(0, 0, 900, 110);
+        g.fillStyle = T.err ? 'rgba(160,30,20,.92)' : 'rgba(12,19,27,.88)'; g.beginPath(); g.roundRect(4, 8, 892, 94, 20); g.fill();
+        g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; let px = 36; g.font = `bold ${px}px system-ui,sans-serif`;
+        while (g.measureText(T.text).width > 850 && px > 16) { px -= 2; g.font = `bold ${px}px system-ui,sans-serif`; }
+        g.fillText(T.text, 450, 56); ttex.needsUpdate = true;
+      }
+      const cp = new THREE.Vector3(), cd = new THREE.Vector3(); camera.getWorldPosition(cp); camera.getWorldDirection(cd);
+      tspr.position.copy(cp).addScaledVector(cd, 1.0).add(new THREE.Vector3(0, -0.22, 0)); tspr.visible = true;
+    } else tspr.visible = false;
+  }
+  // ---------------- atualização por quadro
+  OP.update = (t) => {
+    for (const mn of MN) {
+      const c = cur(mn);
+      if (c && c.end !== undefined && c.n < 2 && t >= c.end + D.RESTART - 0.001) newCycle(mn, c.end + D.RESTART, true);
+    }
+    if (nivel) nivel.scale.set(1, Math.max(OP.tankVol(t) / 250, 0.001), 1);
+    if (lampT) lampT.scale.setScalar(t >= R.transfer.t && t < R.transfer.t1 ? 1 : 0.001);
+    OP.done = MN.every((mn) => R.machines[mn].cycles.length === 2 && R.machines[mn].cycles[1].end !== undefined && t >= R.machines[mn].cycles[1].end);
+    if (!renderer.xr.isPresenting) showTip(OP.hover && label(OP.hover.info), OP.hover && OP.hover.point);
+    drawToast();
+  };
+  // avança o tempo até o próximo momento em que alguma máquina precisa de você (ou termina uma etapa)
+  OP.skip = () => {
+    const t = st.t; let nx = Infinity;
+    for (const mn of MN) for (const c of R.machines[mn].cycles) for (const v of [c.start, c.ready, c.end !== undefined ? c.end + D.RESTART + D.FECHA + D.DOSA + 0.3 : undefined, c.dreno && c.dreno[1]]) if (v !== undefined && v > t + 0.5 && v < nx) nx = v;
+    if (R.transfer.t1 > t + 0.5 && R.transfer.t1 < nx) nx = R.transfer.t1;
+    if (nx < Infinity) { st.t = nx - 0.3; for (const m of Object.values(machines)) m.lastStroke = -1; }
+  };
+  // ---------------- relatório de treinamento (TV)
+  OP.drawReport = (g, W_, H_, t) => {
+    g.fillStyle = '#0c131b'; g.fillRect(0, 0, W_, H_);
+    g.fillStyle = '#12304a'; g.fillRect(0, 0, W_, 70);
+    g.fillStyle = '#fff'; g.font = 'bold 34px system-ui,sans-serif'; g.fillText('RELATÓRIO DO TREINAMENTO · MODO OPERAR', 24, 47);
+    g.font = 'bold 30px system-ui'; g.fillText(hms(simT(t)), 1100, 47);
+    const rows = []; for (const mn of MN) for (const c of R.machines[mn].cycles) if (c.end !== undefined) {
+      const f = Math.min(...Object.values(c.pip)); rows.push({ mn, n: c.n, dur: (c.end - c.start) * K, esp: (f - c.ready) * K, pip: (c.run - c.ready) * K });
+    }
+    const avg = rows.reduce((a, r) => a + r.dur, 0) / Math.max(rows.length, 1);
+    g.font = '20px system-ui'; g.fillStyle = '#9fb0bf';
+    const CX = [40, 170, 280, 420, 610];
+    ['Máquina', 'Ciclo', 'Duração', 'Máquina esperou', 'Pipetagem'].forEach((h, i) => g.fillText(h, CX[i], 110));
+    rows.forEach((r, i) => {
+      const y = 145 + i * 34; g.fillStyle = r.dur <= 8.5 * 60 ? '#cfe0ee' : '#f5b31a'; g.font = '22px system-ui';
+      [r.mn, String(r.n), ms(r.dur), ms(r.esp), ms(r.pip)].forEach((v, j) => g.fillText(v, CX[j], y));
+    });
+    const kx = 830;
+    g.fillStyle = '#16212c'; g.fillRect(kx - 20, 90, 470, 300);
+    g.fillStyle = '#9fb0bf'; g.font = '20px system-ui'; g.fillText('Ciclo médio', kx, 125); g.fillText('Meta 8 h (4 máquinas)', kx, 215); g.fillText('Erros · alertas', kx, 305);
+    g.fillStyle = avg <= 8.5 * 60 ? '#2fbf71' : '#f5b31a'; g.font = 'bold 48px system-ui'; g.fillText(ms(avg), kx, 175);
+    g.fillStyle = '#fff'; g.font = 'bold 40px system-ui'; g.fillText(`${(Math.floor(8 * 3600 / avg) * 4 * R.VOL_CICLO).toLocaleString('pt-BR')} L`, kx, 262);
+    g.fillStyle = OP.errors.length ? '#ff6b5b' : '#2fbf71'; g.fillText(`${OP.errors.length} · ${OP.alerts.length}`, kx, 352);
+    g.fillStyle = '#16212c'; g.fillRect(20, 440, 1240, 275);
+    g.fillStyle = '#fff'; g.font = 'bold 22px system-ui'; g.fillText('OCORRÊNCIAS', 36, 474);
+    const list = [...OP.errors.map((e) => ({ ...e, tipo: 'ERRO' })), ...OP.alerts.map((e) => ({ ...e, tipo: 'alerta' }))].sort((a, b) => a.t - b.t).slice(-7);
+    g.font = '20px system-ui';
+    if (!list.length) { g.fillStyle = '#2fbf71'; g.fillText('Nenhum erro: todos os bocais registrados na primeira tentativa, portas fechadas no CONFIRMAR.', 36, 512); }
+    list.forEach((e, i) => { g.fillStyle = e.tipo === 'ERRO' ? '#ff8a7a' : '#f5b31a'; g.fillText(`${hms(simT(e.t))} · ${e.mn} · ${e.tipo}: ${e.text}`, 36, 512 + i * 30); });
+    if (OP.tankVol(t) > 0.5 && t >= R.transfer.t1) { g.fillStyle = '#19b3c9'; g.font = 'bold 22px system-ui'; g.fillText('Falta: toque TRANSFERIR no painel do TQ-01', 760, 474); }
+  };
+  // ---------------- interface
+  $('seek').style.display = 'none';
+  const sk = document.createElement('button'); sk.textContent = '⏩ Avançar'; sk.title = 'Avança o tempo até a próxima ação necessária'; sk.onclick = () => OP.skip();
+  $('play').after(sk);
+  const arSk = document.createElement('button'); arSk.textContent = '⏩'; arSk.onclick = () => OP.skip(); $('arbtns').prepend(arSk);
+  $('clk').title = 'Modo Operar';
+  window.__op = { OP, actIHM, actDoor, dispense, actTransfer, pick, targets, state };
+}
+
 // ------------------------------------------------------------------ laço principal
 let last = performance.now(), acc = 0, prevT = 0;
 function update(t, dt, playing) {
-  mixS.setTime(Math.min(t, gs.animations[0].duration - 1e-3));
+  if (!OP) mixS.setTime(Math.min(t, gs.animations[0].duration - 1e-3)); else OP.update(t);
   for (const mn of MN) { const m = machines[mn]; m.act.time = clipTime(m.R, t).c; m.mixer.update(0); updateMachineProps(m, mn, t); }
   for (const n in people) {
     const p = people[n]; if (!p.a) continue;
-    const vis = n !== 'SUPERVISOR' || R.sup_windows.some(([a, b]) => t >= a - 0.5 && t <= b + 0.3);
+    const vis = !OP && (n !== 'SUPERVISOR' || R.sup_windows.some(([a, b]) => t >= a - 0.5 && t <= b + 0.3));
     p.a.visible = vis; p.blob.visible = vis;
     if (vis) { p.a.getWorldPosition(tmpV); world.worldToLocal(tmpV); p.blob.position.set(tmpV.x, 0.004, tmpV.z); }
   }
@@ -813,17 +1164,17 @@ function update(t, dt, playing) {
     drawTV(t); drawTQ(t); drawFases(t);
   }
   drawClock(t);
-  $('clk').innerHTML = `real <b>${ms(t)}</b> / ${ms(T_END)} · simulado <b>${hms(simT(t))}</b>`;
+  $('clk').innerHTML = OP ? `OPERAR · simulado <b>${hms(simT(t))}</b> · erros <b>${OP.errors.length}</b>` : `real <b>${ms(t)}</b> / ${ms(T_END)} · simulado <b>${hms(simT(t))}</b>`;
   if (document.activeElement !== $('seek')) $('seek').value = String(t);
 }
 renderer.setAnimationLoop((now, frame) => {
   const dt = Math.min((now - last) / 1000, 0.1); last = now;
   const t0 = st.t;
-  if (st.playing) { st.t = Math.min(st.t + dt * st.speed, T_END); if (st.t >= T_END) togglePlay(); }
+  if (st.playing) { st.t = OP ? st.t + dt * st.speed : Math.min(st.t + dt * st.speed, T_END); if (!OP && st.t >= T_END) togglePlay(); }
   update(st.t, dt, st.playing);
   if (st.playing) triggerEvents(t0, st.t);
   updateAudio(st.t, t0, st.playing);
-  if (renderer.xr.isPresenting) { xrInput(dt); arFrame(frame, dt); }
+  if (renderer.xr.isPresenting) { xrInput(dt); arFrame(frame, dt); if (OP) OP.frame(frame); }
   else {
     if (camMode === 'operadora') followCam('OPERADORA', dt);
     else if (camMode === 'supervisor') followCam('SUPERVISOR', dt);
@@ -845,6 +1196,8 @@ window.__shot = (t, pos, tg) => {
   renderer.render(scene, camera); return true;
 };
 window.__scene = scene; window.__ready = true;
+window.__Box3 = THREE.Box3;
+window.__tick = (t) => { st.t = t; update(t, 0.3, false); };
 window.__xrtest = { XR, arFrame, onSelectStart, onSelectEnd, startPlacing, world, rotateBy };
 window.__stop = () => renderer.setAnimationLoop(null);
 window.__info = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, audio: AC ? AC.state : 'sem áudio', t: st.t });
