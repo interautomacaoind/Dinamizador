@@ -53,7 +53,7 @@ function loadGLB(url) {
   }, bad));
 }
 const EXT = window.__EXT || '.glb';
-const [gs, gm] = await Promise.all([loadGLB('assets/sala_cena' + EXT), loadGLB('assets/maquina_rev17' + EXT)]);
+const [gs, gm] = await Promise.all([loadGLB('assets/sala_cena' + EXT), loadGLB('assets/maquina_rev16' + EXT)]);
 const sala = gs.scene; world.add(sala);
 const mixS = new THREE.AnimationMixer(sala);
 const actS = mixS.clipAction(gs.animations[0]); actS.play();
@@ -76,14 +76,7 @@ for (const mn of MN) {
   const scr = root.getObjectByName('IHM_TELA_IMG');
   if (scr) scr.traverse((o) => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }); });
   const tower = { verde: root.getObjectByName('TORRE_VERDE'), amarelo: root.getObjectByName('TORRE_AMARELO'), vermelho: root.getObjectByName('TORRE_VERMELHO') };
-  // REV17: portas (abrem na pipetagem), tampas dos bocais e LED verde do sensor de cada bocal
-  const node = (n) => root.getObjectByName(n);
-  const doors = { F: [node('PORTA_FRENTE_FOLHA_DIR'), node('PORTA_FRENTE_FOLHA_ESQ')], T: [node('PORTA_TRAS_FOLHA_DIR'), node('PORTA_TRAS_FOLHA_ESQ')] };
-  const caps = [1, 2, 3, 4, 5, 6].map((k) => node('TAMPA_BOCAL_P' + k));
-  const leds = [1, 2, 3, 4, 5, 6].map((k) => node('LED_OK_P' + k));
-  const rest = (o) => (o ? o.rotation.clone() : null);
-  machines[mn] = { R: M, root, mixer, act, cv, ctx: cv.getContext('2d'), tex, tower, pos: B(M.pos[0], M.pos[1], 1.2), lastStroke: -1,
-    doors, caps, leds, doorRest: { F: doors.F.map(rest), T: doors.T.map(rest) }, capRest: caps.map(rest) };
+  machines[mn] = { R: M, root, mixer, act, cv, ctx: cv.getContext('2d'), tex, tower, pos: B(M.pos[0], M.pos[1], 1.2), lastStroke: -1 };
 }
 
 // ------------------------------------------------------------------ telas: TV, relógio, painel do tanque
@@ -140,20 +133,16 @@ function theta(c) {                                           // ângulo da mani
   return 4 * Math.PI + W * (c - 25);
 }
 
-const EV_PARTIDA = R.events.find((e) => e.type === 'partida_escalonada');
-function curCycle(mn, t) { let c = null; for (const x of R.machines[mn].cycles) if (t >= x.start) c = x; return c; }
-function pipCount(c, t) { return c ? Object.values(c.pip).filter((v) => v <= t).length : 0; }
 function state(mn, t) {
   const M = R.machines[mn]; const C = M.cycles;
   let st = { k: 'PRONTA', cyc: null, n: 0 };
-  if (EV_PARTIDA && t >= EV_PARTIDA.t && t < C[0].start) return { k: 'AGENDADA', cyc: null, n: 0, at: C[0].start };
   for (const c of C) {
     if (t < c.start) break;
     st = { cyc: c, n: c.n };
     if (t < c.fecha[1]) st.k = 'FECHANDO';
     else if (t < c.dosa[1]) st.k = 'DOSANDO';
-    else if (c.run === undefined || t < c.run) st.k = 'PIPETAR';
-    else if (t < c.mix[0]) st.k = 'VALIDANDO';
+    else if (c.run === undefined || t < c.run) st.k = 'ATIVO_MANUAL';
+    else if (t < c.ativo[1]) st.k = 'ATIVO_LINHA';
     else if (t < c.mix[1]) st.k = 'DINAMIZANDO';
     else if (t < c.dreno[0]) st.k = 'PAUSA';
     else if (t < c.dreno[1]) st.k = 'DRENANDO';
@@ -162,35 +151,11 @@ function state(mn, t) {
   }
   return st;
 }
-const LABEL = { PRONTA: 'PRONTA', AGENDADA: 'PARTIDA PROGRAMADA', FECHANDO: 'FECHANDO CABEÇOTES', DOSANDO: 'DOSANDO SOL. HIDROALCOÓLICA 20%',
-  PIPETAR: 'PIPETAR ATIVO P1–P6', VALIDANDO: 'SENSORES 6/6 OK', DINAMIZANDO: 'DINAMIZANDO', PAUSA: 'ESTABILIZANDO', DRENANDO: 'DRENANDO → TQ-01',
-  ABRINDO: 'ABRINDO CABEÇOTES', FIM_CICLO: 'CICLO CONCLUÍDO', CONCLUIDO: 'LOTE CONCLUÍDO' };
-const COLOR = { PRONTA: '#9fb0bf', AGENDADA: '#9fb0bf', FECHANDO: '#3d8bfd', DOSANDO: '#3d8bfd', PIPETAR: '#f5b31a', VALIDANDO: '#2fbf71', DINAMIZANDO: '#2fbf71',
+const LABEL = { PRONTA: 'PRONTA', FECHANDO: 'FECHANDO CABEÇOTES', DOSANDO: 'DOSANDO SOLUÇÃO BASE', ATIVO_MANUAL: 'INJETAR ATIVO P1–P6',
+  ATIVO_LINHA: 'ATIVO → GARRAFÕES', DINAMIZANDO: 'DINAMIZANDO', PAUSA: 'ESTABILIZANDO', DRENANDO: 'DRENANDO → TQ-01', ABRINDO: 'ABRINDO CABEÇOTES',
+  FIM_CICLO: 'CICLO CONCLUÍDO', CONCLUIDO: 'LOTE CONCLUÍDO' };
+const COLOR = { PRONTA: '#9fb0bf', FECHANDO: '#3d8bfd', DOSANDO: '#3d8bfd', ATIVO_MANUAL: '#f5b31a', ATIVO_LINHA: '#f08c2e', DINAMIZANDO: '#2fbf71',
   PAUSA: '#2fbf71', DRENANDO: '#19b3c9', ABRINDO: '#3d8bfd', FIM_CICLO: '#9fb0bf', CONCLUIDO: '#9fb0bf' };
-function fitFont(g, txt, maxW, px, weight = 'bold') {       // reduz a fonte até caber (nada cortado)
-  let p = px; g.font = `${weight} ${p}px system-ui,sans-serif`;
-  while (g.measureText(txt).width > maxW && p > 9) { p -= 1; g.font = `${weight} ${p}px system-ui,sans-serif`; }
-}
-const sm01 = (x) => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
-function updateMachineProps(m, mn, t) {
-  const C = R.machines[mn].cycles;
-  // portas: abertas somente durante a pipetagem daquele lado
-  for (const lado of ['F', 'T']) {
-    let u = 0;
-    for (const c of C) for (const [l, a, b] of c.portas) if (l === lado && t >= a - 0.05 && t < b + 0.8) u = Math.max(u, sm01((t - a) / 0.8) * (1 - sm01((t - b) / 0.8)));
-    const sg = lado === 'F' ? 1 : -1;
-    m.doors[lado].forEach((o, i) => { if (o) { o.rotation.copy(m.doorRest[lado][i]); o.rotateY(sg * (i === 0 ? 1 : -1) * 1.75 * u); } });
-  }
-  const c = curCycle(mn, t);
-  for (let k = 0; k < 6; k++) {
-    const cap = m.caps[k], led = m.leds[k], key = 'P' + (k + 1);
-    let u = 0;
-    if (c && c.tampas[key]) { const [a, b] = c.tampas[key]; u = sm01((t - a) / 0.35) * (1 - sm01((t - b) / 0.35)); }
-    if (cap) { cap.rotation.copy(m.capRest[k]); cap.rotateX((k < 3 ? -1 : 1) * 1.9 * u); }
-    const on = c && c.pip[key] !== undefined && t >= c.pip[key] && !(c.abre && t >= c.abre[1]);
-    if (led) led.scale.setScalar(on ? 1 : 0.001);
-  }
-}
 
 function tankVol(t) {
   const T = R.tank; if (t <= T[0][0]) return T[0][1];
@@ -218,7 +183,7 @@ function drawIHM(m, mn, t) {
   g.fillStyle = '#12304a'; g.fillRect(0, 0, 400, 34);
   g.fillStyle = '#fff'; g.font = 'bold 19px system-ui,sans-serif'; g.fillText(`CMR ${mn}`, 10, 24);
   g.font = '15px system-ui,sans-serif'; g.fillStyle = '#9fd0ff'; g.fillText(hms(simT(t)), 300, 23);
-  g.fillStyle = COLOR[st.k]; fitFont(g, LABEL[st.k], 376, 22);
+  g.fillStyle = COLOR[st.k]; g.font = 'bold 22px system-ui,sans-serif';
   g.fillText(LABEL[st.k], 12, 68);
   g.font = '15px system-ui,sans-serif'; g.fillStyle = '#cfe0ee';
   g.fillText(`Ciclo ${st.n || 0} / 2   ·   Modo AUTO`, 12, 92);
@@ -231,21 +196,17 @@ function drawIHM(m, mn, t) {
       g.fillStyle = '#cfe0ee'; g.fillText(`P${i + 1}`, x + 14, 222);
     }
     g.fillText(`${(3.6 * Math.min(u, 1)).toFixed(2).replace('.', ',')} L`, 300, 92);
-  } else if (st.k === 'PIPETAR' || st.k === 'VALIDANDO') {
-    const blink = Math.floor(t * 2) % 2, n = pipCount(c, t);
+  } else if (st.k === 'ATIVO_MANUAL') {
+    const blink = Math.floor(t * 2) % 2;
     for (let i = 0; i < 6; i++) {
-      const v = c.pip['P' + (i + 1)], ok = v !== undefined && t >= v;
+      const ok = c.inj[i] !== undefined && t >= c.inj[i];
       const x = 14 + i * 64;
-      g.fillStyle = ok ? '#2fbf71' : (blink ? '#f5b31a' : '#4a3a12'); g.fillRect(x, 106, 50, 50);
-      g.fillStyle = '#0b1622'; g.font = 'bold 20px system-ui'; g.fillText(ok ? '✔' : `P${i + 1}`, x + (ok ? 16 : 10), 139);
+      g.fillStyle = ok ? '#2fbf71' : (blink ? '#f5b31a' : '#4a3a12'); g.fillRect(x, 110, 50, 50);
+      g.fillStyle = '#0b1622'; g.font = 'bold 20px system-ui'; g.fillText(ok ? '✔' : `P${i + 1}`, x + (ok ? 16 : 10), 143);
     }
-    g.font = '14px system-ui'; g.fillStyle = '#cfe0ee';
-    g.fillText(`Sensores dos bocais: ${n}/6 registros · 30 mL/garrafão`, 12, 176);
-    g.fillText(st.k === 'VALIDANDO' ? 'Todos os bocais registrados — mistura liberada' : n < 6 ? 'Abra a porta, pipete em cada bocal e feche' : 'Feche as portas e toque CONFIRMAR', 12, 196);
-  } else if (st.k === 'AGENDADA') {
-    g.fillText('Partida escalonada (rede das 4 máquinas)', 12, 130);
-    g.font = 'bold 30px system-ui'; g.fillStyle = '#fff'; g.fillText(`inicia em ${ms(Math.max(0, (st.at - t) * K))}`, 12, 172);
-  } else if (st.k === 'DINAMIZANDO' || st.k === 'PAUSA') {
+    g.font = '15px system-ui'; g.fillStyle = '#cfe0ee';
+    g.fillText('Pipete 1 mL em cada funil e aperte ATIVO OK', 12, 190);
+  } else if (st.k === 'DINAMIZANDO' || st.k === 'ATIVO_LINHA' || st.k === 'PAUSA') {
     const u = st.k === 'DINAMIZANDO' ? (t - c.mix[0]) / (c.mix[1] - c.mix[0]) : st.k === 'PAUSA' ? 1 : 0;
     const rest = (1 - u) * R.MIX_REAL * K;
     g.font = 'bold 44px system-ui'; g.fillStyle = '#fff'; g.fillText(ms(rest), 12, 150);
@@ -261,21 +222,15 @@ function drawIHM(m, mn, t) {
   } else if (st.k === 'FECHANDO' || st.k === 'ABRINDO') {
     const [a, b] = st.k === 'FECHANDO' ? c.fecha : c.abre; bar(130, (t - a) / (b - a), '#3d8bfd');
   } else {
-    g.fillText('Garrafões posicionados · portas fechadas', 12, 130); g.fillText(mn === 'M1' ? 'Toque PARTIDA ESCALONADA' : 'Toque INICIAR CICLO', 12, 154);
+    g.fillText('Garrafões posicionados · portas fechadas', 12, 130); g.fillText('Toque INICIAR CICLO', 12, 154);
   }
-  if (st.k !== 'PIPETAR' && st.k !== 'VALIDANDO') {
-    const bl = st.k === 'PRONTA' && mn === 'M1' ? 'PARTIDA ESCALONADA' : 'INICIAR CICLO';
-    g.fillStyle = '#1f7a4a'; g.fillRect(222, 204, 168, 28); g.fillStyle = '#fff'; fitFont(g, bl, 156, 14); g.fillText(bl, 230, 223);
-  } else {
-    const ok = pipCount(c, t) === 6;
-    g.fillStyle = ok ? '#1f7a4a' : '#3a4854'; g.fillRect(250, 212, 140, 24); g.fillStyle = '#fff'; g.font = 'bold 14px system-ui'; g.fillText('CONFIRMAR', 278, 229);
-  }
+  g.fillStyle = '#1f7a4a'; g.fillRect(250, 204, 140, 28); g.fillStyle = '#fff'; g.font = 'bold 14px system-ui'; g.fillText('INICIAR CICLO', 268, 223);
   m.tex.needsUpdate = true;
   // torre
   const blink = Math.floor(t * 2.5) % 2 === 0;
-  const auto = ['FECHANDO', 'DOSANDO', 'VALIDANDO', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO'].includes(st.k);
+  const auto = ['FECHANDO', 'DOSANDO', 'ATIVO_LINHA', 'DINAMIZANDO', 'PAUSA', 'DRENANDO', 'ABRINDO'].includes(st.k);
   if (m.tower.verde) m.tower.verde.visible = auto;
-  if (m.tower.amarelo) m.tower.amarelo.visible = (st.k === 'PIPETAR' && blink) || ['PRONTA', 'AGENDADA', 'FIM_CICLO', 'CONCLUIDO'].includes(st.k);
+  if (m.tower.amarelo) m.tower.amarelo.visible = (st.k === 'ATIVO_MANUAL' && blink) || ['PRONTA', 'FIM_CICLO', 'CONCLUIDO'].includes(st.k);
   if (m.tower.vermelho) m.tower.vermelho.visible = false;
 }
 
@@ -292,14 +247,14 @@ function drawTV(t) {
     g.fillStyle = COLOR[st.k]; g.fillRect(x, y, 300, 8);
     g.fillStyle = '#fff'; g.font = 'bold 30px system-ui'; g.fillText(mn, x + 14, y + 46);
     g.font = '18px system-ui'; g.fillStyle = '#9fb0bf'; g.fillText(`ciclo ${st.n || 0}/2`, x + 200, y + 42);
-    g.fillStyle = COLOR[st.k]; fitFont(g, LABEL[st.k], 272, 21); g.fillText(LABEL[st.k], x + 14, y + 84);
+    g.fillStyle = COLOR[st.k]; g.font = 'bold 21px system-ui'; g.fillText(LABEL[st.k], x + 14, y + 84);
     g.fillStyle = '#cfe0ee'; g.font = '18px system-ui';
     if (c) {
       const el = ((c.end !== undefined && t >= c.end ? c.end : t) - c.start) * K;
       g.fillText(`tempo no ciclo: ${ms(el)}`, x + 14, y + 118);
       if (st.k === 'DINAMIZANDO') g.fillText(`mistura: ${ms(Math.max(0, (c.mix[1] - t) * K))} restante`, x + 14, y + 146);
-      if (st.k === 'PIPETAR') g.fillText(`pipetagem: ${pipCount(c, t)}/6 · ${ms((t - c.ready) * K)}`, x + 14, y + 146);
-    } else g.fillText(st.k === 'AGENDADA' ? `partida em ${ms(Math.max(0, (st.at - t) * K))}` : 'aguardando início', x + 14, y + 118);
+      if (st.k === 'ATIVO_MANUAL') g.fillText(`aguardando operador: ${ms((t - c.ready) * K)}`, x + 14, y + 146);
+    } else g.fillText('aguardando início', x + 14, y + 118);
     const mine = P.done.filter((d) => d.mn === mn);
     g.fillStyle = '#9fb0bf'; g.font = '17px system-ui';
     g.fillText(`concluídos: ${mine.map((d) => 'C' + d.n + ' ' + ms(d.dur)).join('  ') || '—'}`, x + 14, y + 176);
@@ -315,7 +270,7 @@ function drawTV(t) {
     const x = 20 + i * 312, y = 296;
     g.fillStyle = '#16212c'; g.fillRect(x, y, 300, 110);
     g.fillStyle = '#9fb0bf'; g.font = '19px system-ui'; g.fillText(a, x + 14, y + 32);
-    g.fillStyle = col; fitFont(g, b, 272, 40); g.fillText(b, x + 14, y + 84);
+    g.fillStyle = col; g.font = 'bold 40px system-ui'; g.fillText(b, x + 14, y + 84);
   });
   // meta do dia
   const y = 424;
@@ -343,32 +298,7 @@ function drawTV(t) {
     g.fillStyle = 'rgba(15,81,50,.92)'; g.fillRect(340, 300, 600, 90);
     g.fillStyle = '#fff'; g.font = 'bold 30px system-ui'; g.fillText('TRANSFERÊNCIA → SALA DE TANQUES', 362, 356);
   }
-  if (R.cafe && t >= R.cafe.tv0 && t < R.cafe.tv1) drawCafe(g, W_, H_, t);
   TVs.tex.needsUpdate = true;
-}
-
-function drawCafe(g, W_, H_, t) {                          // PAUSA DO CAFÉ (depois volta aos indicadores finais)
-  const u = t - R.cafe.tv0;
-  const gr = g.createLinearGradient(0, 0, 0, H_); gr.addColorStop(0, '#4a2a14'); gr.addColorStop(1, '#1d120a');
-  g.fillStyle = gr; g.fillRect(0, 0, W_, H_);
-  g.save(); g.translate(W_ / 2, 300);
-  // xícara
-  g.fillStyle = '#f4efe8'; g.beginPath(); g.moveTo(-120, -40); g.lineTo(120, -40); g.lineTo(95, 110); g.quadraticCurveTo(0, 140, -95, 110); g.closePath(); g.fill();
-  g.strokeStyle = '#f4efe8'; g.lineWidth = 22; g.beginPath(); g.arc(135, 25, 45, -Math.PI / 2, Math.PI / 2); g.stroke();
-  g.fillStyle = '#6b3b1c'; g.beginPath(); g.ellipse(0, -40, 118, 20, 0, 0, 7); g.fill();
-  g.fillStyle = '#e8e1d6'; g.beginPath(); g.ellipse(0, 140, 190, 22, 0, 0, 7); g.fill();
-  // vapor
-  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 10; g.lineCap = 'round';
-  for (let k = -1; k <= 1; k++) {
-    g.beginPath();
-    for (let y = 0; y < 150; y += 6) { const x = k * 55 + 16 * Math.sin(y / 22 + u * 3 + k); if (y === 0) g.moveTo(x, -70 - y); else g.lineTo(x, -70 - y); }
-    g.stroke();
-  }
-  g.restore();
-  g.textAlign = 'center'; g.fillStyle = '#ffd89a'; g.font = 'bold 92px system-ui,sans-serif'; g.fillText('PAUSA DO CAFÉ', W_ / 2, 560);
-  g.fillStyle = '#f4efe8'; g.font = '34px system-ui,sans-serif'; g.fillText('O café chegou! · 15 min · lote concluído e transferido', W_ / 2, 616);
-  g.font = 'bold 30px system-ui'; g.fillText(hms(simT(t)), W_ / 2, 680);
-  g.textAlign = 'left';
 }
 
 function drawClock(t) {
@@ -428,10 +358,6 @@ function makeSounds() {
   S.chime = buf(1.2, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.35) * Math.sin(2 * Math.PI * 880 * t) + (t > 0.18 ? Math.exp(-(t - 0.18) / 0.45) * Math.sin(2 * Math.PI * 1318.5 * t) : 0); } norm(d, 0.5); });
   S.steps = [0, 1, 2, 3].map((k) => buf(0.14, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / (0.018 + 0.004 * k)) * rnd() * 0.8 + Math.exp(-t / 0.03) * Math.sin(2 * Math.PI * (85 + 10 * k) * t); } lp(d, 0.35 + 0.05 * k); norm(d, 0.7); }));
   S.dooro = buf(1.0, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = (t < 0.05 ? Math.exp(-t / 0.008) * rnd() : 0) + 0.25 * Math.sin(Math.PI * Math.min(t / 1.0, 1)) * rnd(); } lp(d, 0.08); norm(d, 0.6); });
-  // apito de juiz (apito de ervilha): portadora ~3 kHz com trinado de ~28 Hz
-  S.apito = buf(0.75, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; const tr = 0.5 + 0.5 * Math.sin(2 * Math.PI * 28 * t);
-    const f = 2950 + 220 * tr; const env = Math.min(1, t / 0.02) * Math.min(1, (0.75 - t) / 0.06);
-    d[i] = env * ((0.55 + 0.45 * tr) * Math.sin(2 * Math.PI * f * t + 0.8 * Math.sin(2 * Math.PI * 28 * t)) + 0.12 * rnd()); } norm(d, 0.9); });
   S.doorc = buf(0.5, (d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = Math.exp(-t / 0.05) * Math.sin(2 * Math.PI * 75 * t) + 0.6 * Math.exp(-t / 0.01) * rnd(); } norm(d, 0.9); });
   return S;
 }
@@ -457,7 +383,7 @@ function initAudio() {
   audio.tpump = positional(pumpA, SND.tpump, true, 1.5); audio.tpump.play();
   audio.hvac = new THREE.Audio(listener); audio.hvac.setBuffer(SND.hvac); audio.hvac.setLoop(true); audio.hvac.setVolume(0.12); audio.hvac.play();
   audio.door = anchor(B(R.pts.door[0], R.pts.door[1], 1.2));
-  audio.tv = anchor(B(0, 4.9, 3.0));
+  audio.tv = anchor(B(0, 7.4, 3.0));
   audio.panel = anchor(B(R.pts.panel[0], R.pts.panel[1], 1.2));
   for (const n of ['OPERADORA', 'SUPERVISOR']) audio.pools[n] = [0, 1, 2, 3].map((k) => { const o = anchor(new THREE.Vector3()); return { o, a: positional(o, SND.steps[k], false, 1.0) }; });
 }
@@ -472,9 +398,7 @@ function triggerEvents(t0, t1) {
   for (const e of R.events) {
     if (e.t <= t0 || e.t > t1) continue;
     const m = e.m ? machines[e.m] : null;
-    if (e.type === 'ihm_toque' || e.type === 'botao' || e.type === 'pipeta') oneShot(m.snd.mid, SND.beep, e.type === 'pipeta' ? 0.3 : 0.6, 1.0);
-    else if (e.type === 'porta_maq_abre' || e.type === 'porta_maq_fecha') oneShot(m.snd.mid, SND.click, 0.8, 1.2);
-    else if (e.type === 'apito') oneShot(audio.door, SND.apito, 1.0, 5);
+    if (e.type === 'ihm_toque' || e.type === 'botao' || e.type === 'injeta') oneShot(m.snd.mid, SND.beep, e.type === 'injeta' ? 0.35 : 0.6, 1.0);
     else if (e.type === 'porta_abre') oneShot(audio.door, SND.dooro, 0.9);
     else if (e.type === 'porta_fecha') oneShot(audio.door, SND.doorc, 1.0);
     else if (e.type === 'ciclo_fim') { oneShot(audio.tv, SND.chime, 0.8, 4); oneShot(m.snd.mid, SND.beep, 0.6); }
@@ -482,7 +406,7 @@ function triggerEvents(t0, t1) {
     else if (e.type === 'tablet_toque') { }
   }
   // cliques de válvula nas transições de dosagem / drenagem
-  for (const mn of MN) for (const c of R.machines[mn].cycles) for (const tt of [c.dosa[0], c.dosa[1], c.dreno ? c.dreno[0] : -1, c.dreno ? c.dreno[1] : -1]) {
+  for (const mn of MN) for (const c of R.machines[mn].cycles) for (const tt of [c.dosa[0], c.dosa[1], c.dreno ? c.dreno[0] : -1, c.dreno ? c.dreno[1] : -1, c.ativo ? c.ativo[0] : -1]) {
     if (tt > t0 && tt <= t1) oneShot(machines[mn].snd.mid, SND.click, 0.7, 1.2);
   }
   for (const n of ['OPERADORA', 'SUPERVISOR']) {
@@ -502,7 +426,7 @@ function updateAudio(t, t0, playing) {
     const m = machines[mn], st = state(mn, t), k = st.k;
     const run = playing ? 1 : 0;
     setLoop(m.snd.motor, run * (k === 'DINAMIZANDO' ? 0.55 : 0));
-    setLoop(m.snd.pump, run * (k === 'DOSANDO' ? 0.35 : 0));
+    setLoop(m.snd.pump, run * (k === 'DOSANDO' || k === 'ATIVO_LINHA' ? 0.35 : 0));
     setLoop(m.snd.vac, run * (k === 'DRENANDO' ? 0.45 : 0));
     setLoop(m.snd.heads, run * (k === 'FECHANDO' || k === 'ABRINDO' ? 0.25 : 0));
     // golpes: um a cada volta da manivela
@@ -519,10 +443,9 @@ function updateAudio(t, t0, playing) {
 
 // ------------------------------------------------------------------ câmeras
 const VIEWS = {
-  geral: [B(-0.6, -4.75, 3.3), B(0.2, 1.0, 1.3)],
-  m1: [B(0.9, -4.3, 1.8), B(3.0, -2.4, 1.3)],
-  bocais: [B(1.95, -2.9, 1.95), B(2.95, -2.32, 1.33)],
-  tv: [B(0, 0.8, 1.7), B(0, 4.9, 2.9)],
+  geral: [B(0, -7.2, 3.7), B(0, 0.8, 0.9)],
+  m1: [B(1.0, -5.4, 1.75), B(2.9, -3.2, 1.3)],
+  tv: [B(0, 1.8, 1.7), B(0, 7.4, 2.9)],
   tanque: [B(2.0, -2.6, 1.8), B(0.1, 0.0, 1.0)],
 };
 let camMode = 'geral';
@@ -547,13 +470,51 @@ function followCam(n, dt) {
 // ------------------------------------------------------------------ VR e AR (Quest / Android)
 const vrBtn = VRButton.createButton(renderer);
 $('vrslot').appendChild(vrBtn);
-// AR: passthrough do Quest ou câmera do Android. Dois modos: escala real (1:1) e maquete (1:20) sobre a mesa
-const XR = { mode: null, scale: 1, placed: false, hitSrc: null, reticle: null };
+// AR (REV17 · etapa 2): marcador no piso → toque para posicionar → arrastar / girar / pinçar → âncora no ambiente
+//   celular: 1 dedo arrasta, 2 dedos giram (na maquete, pinça muda a escala); botões na tela: Reposicionar, ⟲ ⟳
+//   Quest: gatilho (ou pinça da mão) posiciona e, segurado, arrasta; analógico direito gira; X = reposicionar
+const XR = { mode: null, scale: 1, state: 'idle', yaw: 0, hitSrc: null, touchSrc: null, ctrlHit: new Map(), anchor: null, needAnchor: false,
+  active: new Map(), drag: null, twist: null, lastHit: null, t0: 0, manipT: 0, hasHit: false };
 const SHELL = /Parede|Piso epoxi|Forro|Junta de painel|Aluminio luminaria|Difusor LED|Rodape|antecamara/i;
 const shell = [];
 sala.traverse((o) => { if (o.isMesh) { const mats = [].concat(o.material).map((m) => m.name).join('|'); if (SHELL.test(mats) || SHELL.test(o.name)) shell.push(o); } });
-XR.reticle = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x2fbf71 }));
-XR.reticle.matrixAutoUpdate = false; XR.reticle.visible = false; scene.add(XR.reticle);
+// marcador de superfície: disco branco translúcido + anel + cruz (como nos apps de AR)
+XR.reticle = new THREE.Group(); XR.reticle.visible = false; scene.add(XR.reticle);
+{
+  const disk = new THREE.Mesh(new THREE.CircleGeometry(0.16, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.17, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false }));
+  const cross = new THREE.Mesh(new THREE.PlaneGeometry(0.012, 0.09).rotateX(-Math.PI / 2), ring.material);
+  const cross2 = cross.clone(); cross2.rotation.y = Math.PI / 2;
+  XR.reticle.add(disk, ring, cross, cross2);
+  XR.reticle.userData.ring = ring;
+}
+// contorno da área ocupada (sala 10 × 10 m ou maquete) — aparece enquanto posiciona/arrasta
+const footprint = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([B(-5, -5, 0.01), B(5, -5, 0.01), B(5, 5, 0.01), B(-5, 5, 0.01)]),
+  new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));
+footprint.visible = false; world.add(footprint);
+// raios dos controles / mãos do Quest
+const rays = [0, 1].map((i) => {
+  const c = renderer.xr.getController(i);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }));
+  line.scale.z = 4; c.add(line); scene.add(c); return c;
+});
+// interface sobre a câmera (dom-overlay, Android)
+const arui = document.createElement('div'); arui.id = 'arui';
+arui.innerHTML = `<div id="armsg">Procurando superfície… mova o celular devagar apontando para o piso</div>
+  <div id="arbtns"><button id="arRe">⟲ Reposicionar</button><button id="arL">↺</button><button id="arR">↻</button><button id="arPlay">❚❚</button><button id="arExit">Sair</button></div>`;
+document.body.appendChild(arui);
+$('arbtns').addEventListener('beforexrselect', (e) => e.preventDefault());       // toques nos botões não posicionam
+const arMsg = (s) => { const m = $('armsg'); if (m && m.textContent !== s) m.textContent = s; };
+function uiState() {
+  $('arbtns').style.display = XR.state === 'placed' ? 'flex' : 'none';
+  $('arPlay').textContent = st.playing ? '❚❚' : '▶';
+}
+$('arRe').onclick = () => startPlacing();
+$('arL').onclick = () => rotateBy(Math.PI / 12);
+$('arR').onclick = () => rotateBy(-Math.PI / 12);
+$('arPlay').onclick = () => { togglePlay(); uiState(); };
+$('arExit').onclick = () => renderer.xr.getSession() && renderer.xr.getSession().end();
+
 function arButton(label, scale) {
   const b = document.createElement('button'); b.textContent = label; b.style.marginLeft = '6px';
   if (!navigator.xr) { b.disabled = true; b.title = 'Este navegador não tem WebXR'; }
@@ -561,72 +522,177 @@ function arButton(label, scale) {
   b.onclick = async () => {
     if (renderer.xr.isPresenting) { renderer.xr.getSession().end(); return; }
     try {
-      const ses = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'], optionalFeatures: ['hit-test', 'dom-overlay'], domOverlay: { root: document.body } });
+      const ses = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'],
+        optionalFeatures: ['hit-test', 'anchors', 'plane-detection', 'dom-overlay', 'hand-tracking'], domOverlay: { root: arui } });
       XR.mode = 'ar'; XR.scale = scale;
       await renderer.xr.setSession(ses);
       try { const vs = await ses.requestReferenceSpace('viewer'); XR.hitSrc = await ses.requestHitTestSource({ space: vs }); } catch (e) { XR.hitSrc = null; }
-      ses.addEventListener('select', placeHere);
+      try { XR.touchSrc = await ses.requestHitTestSourceForTransientInput({ profile: 'generic-touchscreen' }); } catch (e) { XR.touchSrc = null; }
+      ses.addEventListener('inputsourceschange', onSources); onSources({ added: [...ses.inputSources], removed: [] });
+      ses.addEventListener('selectstart', onSelectStart);
+      ses.addEventListener('selectend', onSelectEnd);
     } catch (e) { alert('Não foi possível iniciar a realidade aumentada: ' + e.message); }
   };
   $('vrslot').appendChild(b);
 }
 arButton('AR 1:1', 1);
 arButton('AR maquete 1:20', 0.05);
-function placeWorld(pos) {
-  const d = new THREE.Vector3(); camera.getWorldDirection(d);
-  world.scale.setScalar(XR.scale);
-  world.rotation.set(0, Math.atan2(-d.x, -d.z), 0);          // porta (frente da sala) voltada para quem olha
-  world.position.copy(pos); XR.placed = true;
+
+function onSources(ev) {
+  const ses = renderer.xr.getSession(); if (!ses) return;
+  for (const s of ev.removed || []) { const h = XR.ctrlHit.get(s); if (h) h.cancel(); XR.ctrlHit.delete(s); }
+  for (const s of ev.added || []) if (s.targetRayMode === 'tracked-pointer' && ses.requestHitTestSource) {
+    ses.requestHitTestSource({ space: s.targetRaySpace }).then((h) => XR.ctrlHit.set(s, h)).catch(() => {});
+  }
 }
-function placeHere() {
+const ref = () => renderer.xr.getReferenceSpace();
+const _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _d = new THREE.Vector3();
+function dropAnchor() { if (XR.anchor) { try { XR.anchor.delete(); } catch (e) { } XR.anchor = null; } }
+function startPlacing() {
+  dropAnchor(); XR.state = 'placing'; XR.drag = null; XR.twist = null; XR.hasHit = false; XR.t0 = performance.now();
+  world.scale.setScalar(XR.scale); world.visible = false; footprint.visible = true; uiState();
+}
+function faceYaw() { camera.getWorldDirection(_d); return Math.atan2(-_d.x, -_d.z); }   // porta (frente da sala) voltada para quem olha
+function applyPose(pos) { world.position.copy(pos); world.quaternion.setFromAxisAngle(_v.set(0, 1, 0), XR.yaw); }
+function rotateBy(a) { XR.yaw += a; world.quaternion.setFromAxisAngle(_v.set(0, 1, 0), XR.yaw); dropAnchor(); XR.manipT = performance.now(); XR.needAnchor = true; }
+function confirmPlace() {
+  if (!world.visible) return;
+  XR.state = 'placed'; footprint.visible = false; XR.reticle.visible = false; XR.needAnchor = true; uiState();
+}
+function screenTouches() { return [...XR.active.keys()].filter((s) => s.targetRayMode === 'screen'); }
+function onSelectStart(e) {
   if (XR.mode !== 'ar') return;
-  if (XR.reticle.visible) placeWorld(new THREE.Vector3().setFromMatrixPosition(XR.reticle.matrix));
-  else { const p = new THREE.Vector3(), d = new THREE.Vector3(); camera.getWorldPosition(p); camera.getWorldDirection(d); d.y = 0; d.normalize();
-    placeWorld(p.addScaledVector(d, XR.scale < 1 ? 0.8 : 3.0).setY(XR.scale < 1 ? 0.75 : 0)); }
+  const s = e.inputSource; XR.active.set(s, { t: performance.now() });
+  if (XR.state !== 'placed') return;
+  const tl = screenTouches();
+  if (tl.length >= 2) {                                   // 2 dedos: girar (e pinçar na maquete)
+    XR.drag = null;
+    const [a, b] = tl; const ga = a.gamepad, gb = b.gamepad;
+    if (ga && gb) XR.twist = { a, b, ang: Math.atan2(gb.axes[1] - ga.axes[1], gb.axes[0] - ga.axes[0]), dist: Math.hypot(gb.axes[0] - ga.axes[0], gb.axes[1] - ga.axes[1]), yaw: XR.yaw, scale: world.scale.x };
+  } else XR.drag = { src: s, off: null, start: null, moved: false };
+}
+function onSelectEnd(e) {
+  if (XR.mode !== 'ar') return;
+  const s = e.inputSource, info = XR.active.get(s); XR.active.delete(s);
+  if (XR.state === 'placing') { confirmPlace(); return; }
+  if (XR.twist && (XR.twist.a === s || XR.twist.b === s)) { XR.twist = null; XR.needAnchor = true; }
+  if (XR.drag && XR.drag.src === s) { const moved = XR.drag.moved; XR.drag = null; if (moved) XR.needAnchor = true; }
+}
+// ponto onde um raio (origem o, direção d) cruza o plano horizontal y = h
+function rayPlane(o, d, h) { if (Math.abs(d.y) < 1e-4) return null; const u = (h - o.y) / d.y; return u > 0 && u < 30 ? o.clone().addScaledVector(d, u) : null; }
+function poseRay(space, frame) {
+  const p = frame.getPose(space, ref()); if (!p) return null;
+  const o = new THREE.Vector3().copy(p.transform.position); const q = _q.copy(p.transform.orientation);
+  return { o, d: new THREE.Vector3(0, 0, -1).applyQuaternion(q) };
+}
+function arFrame(frame, dt) {
+  if (!frame || XR.mode !== 'ar') return;
+  const rs = ref();
+  // ---------------- posicionando: o marcador segue a superfície e a sala/maquete aparece como prévia
+  if (XR.state === 'placing') {
+    let hit = null;
+    const ctrl = [...XR.ctrlHit.entries()].find(([s]) => s.handedness === 'right') || [...XR.ctrlHit.entries()][0];
+    const src = ctrl ? ctrl[1] : XR.hitSrc;
+    if (src) { const hs = frame.getHitTestResults(src); if (hs.length) { const p = hs[0].getPose(rs); if (p) hit = new THREE.Vector3().copy(p.transform.position); XR.lastHitResult = hs[0]; } }
+    if (!hit && performance.now() - XR.t0 > 3000) {       // sem superfície detectada: usa o piso (local-floor) à frente
+      const r = ctrl ? poseRay([...XR.ctrlHit.keys()][0].targetRaySpace, frame) : null;
+      if (r) hit = rayPlane(r.o, r.d, XR.scale < 1 ? 0.75 : 0);
+      if (!hit) { camera.getWorldPosition(_v); camera.getWorldDirection(_d); _d.y = 0; _d.normalize(); hit = _v.clone().addScaledVector(_d, XR.scale < 1 ? 0.8 : 3.0).setY(XR.scale < 1 ? 0.75 : 0); }
+    }
+    if (hit) {
+      XR.hasHit = true; XR.reticle.visible = true; XR.reticle.position.copy(hit);
+      XR.reticle.userData.ring.scale.setScalar(1 + 0.06 * Math.sin(performance.now() / 180));
+      XR.yaw = faceYaw(); applyPose(hit); world.visible = true;
+      arMsg(XR.scale < 1 ? 'Superfície encontrada · toque para colocar a maquete' : 'Piso encontrado · toque para posicionar a sala (1:1)');
+    } else { XR.reticle.visible = false; world.visible = false; arMsg('Procurando superfície… mova o celular devagar apontando para o piso'); }
+    return;
+  }
+  if (XR.state !== 'placed') return;
+  // ---------------- 2 dedos: girar / escala da maquete
+  if (XR.twist) {
+    const ga = XR.twist.a.gamepad, gb = XR.twist.b.gamepad;
+    if (ga && gb) {
+      const ang = Math.atan2(gb.axes[1] - ga.axes[1], gb.axes[0] - ga.axes[0]);
+      XR.yaw = XR.twist.yaw - (ang - XR.twist.ang); dropAnchor();
+      if (XR.scale < 1) { const dist = Math.hypot(gb.axes[0] - ga.axes[0], gb.axes[1] - ga.axes[1]); world.scale.setScalar(THREE.MathUtils.clamp(XR.twist.scale * dist / Math.max(XR.twist.dist, 1e-3), 0.02, 0.15)); }
+      world.quaternion.setFromAxisAngle(_v.set(0, 1, 0), XR.yaw);
+      arMsg(`Girando${XR.scale < 1 ? ' · escala 1:' + Math.round(1 / world.scale.x) : ''}`);
+    }
+  }
+  // ---------------- arrastar: 1 dedo (hit-test do toque) ou raio do controle/mão (plano do piso da sala)
+  else if (XR.drag) {
+    const D = XR.drag; let p = null;
+    if (D.src.targetRayMode === 'screen' && XR.touchSrc) {
+      for (const r of frame.getHitTestResultsForTransientInput(XR.touchSrc)) if (r.inputSource === D.src && r.results.length) { const q = r.results[0].getPose(rs); if (q) p = new THREE.Vector3().copy(q.transform.position); }
+    }
+    if (!p) { const r = poseRay(D.src.targetRaySpace, frame); if (r) p = rayPlane(r.o, r.d, world.position.y); }
+    if (p) {
+      if (!D.start) { D.start = p.clone(); D.off = world.position.clone().sub(p); }
+      if (!D.moved && p.distanceTo(D.start) > 0.03) { D.moved = true; dropAnchor(); footprint.visible = true; }
+      if (D.moved) { world.position.set(p.x + D.off.x, D.src.targetRayMode === 'screen' ? p.y : world.position.y, p.z + D.off.z); arMsg('Movendo… solte para fixar'); }
+    }
+  } else { footprint.visible = false; arMsg(XR.scale < 1 ? 'Maquete fixada · 1 dedo arrasta · 2 dedos giram e mudam a escala' : 'Sala fixada · 1 dedo arrasta · 2 dedos giram'); }
+  // ---------------- âncora: mantém a sala presa ao ambiente real enquanto você anda
+  if (XR.needAnchor && !XR.drag && !XR.twist && performance.now() - XR.manipT > 400 && frame.createAnchor) {
+    XR.needAnchor = false; dropAnchor();
+    const t = new XRRigidTransform(world.position, world.quaternion);
+    frame.createAnchor(t, rs).then((a) => { if (XR.state === 'placed' && !XR.drag && !XR.twist) XR.anchor = a; else a.delete(); }).catch(() => { });
+  }
+  if (XR.anchor && frame.trackedAnchors && frame.trackedAnchors.has(XR.anchor)) {
+    const p = frame.getPose(XR.anchor.anchorSpace, rs);
+    if (p) { world.position.copy(p.transform.position); world.quaternion.copy(p.transform.orientation); }
+  }
 }
 renderer.xr.addEventListener('sessionstart', () => {
   if (XR.mode === 'ar') {
     scene.background = null; shell.forEach((o) => { o.visible = false; });
     listener.setMasterVolume(XR.scale < 1 ? 0.45 : 1);
-    XR.placed = false; setTimeout(() => { if (!XR.placed) placeHere(); }, 1500);
+    arui.style.display = 'block'; startPlacing();
   } else { rig.position.copy(B(0.0, -4.2, 0)); rig.rotation.set(0, 0, 0); }
-  initAudio(); if (!st.playing) togglePlay();
+  rays.forEach((c) => { c.visible = true; });
+  initAudio(); if (!st.playing) togglePlay(); uiState();
 });
 renderer.xr.addEventListener('sessionend', () => {
   if (XR.mode === 'ar') {
     scene.background = new THREE.Color(0xdfe3e7); shell.forEach((o) => { o.visible = true; });
+    dropAnchor(); world.visible = true; footprint.visible = false;
     world.position.set(0, 0, 0); world.rotation.set(0, 0, 0); world.scale.setScalar(1); listener.setMasterVolume(1);
-    XR.reticle.visible = false; XR.hitSrc = null; XR.mode = null;
+    XR.reticle.visible = false; XR.hitSrc = null; XR.touchSrc = null; XR.ctrlHit.clear(); XR.active.clear(); XR.drag = XR.twist = null; XR.mode = null; XR.state = 'idle';
+    arui.style.display = 'none';
   }
+  rays.forEach((c) => { c.visible = false; });
   rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); setView(camMode === 'livre' ? 'geral' : camMode);
 });
-function arHit(frame) {
-  if (!XR.hitSrc || !frame) { XR.reticle.visible = false; return; }
-  const hs = frame.getHitTestResults(XR.hitSrc);
-  if (hs.length) { const pose = hs[0].getPose(renderer.xr.getReferenceSpace()); XR.reticle.visible = true; XR.reticle.matrix.fromArray(pose.transform.matrix); }
-  else XR.reticle.visible = false;
-}
 let snapCool = 0, btnPrev = {};
 function xrInput(dt) {
   const s = renderer.xr.getSession(); if (!s) return;
   const ar = XR.mode === 'ar';
   for (const src of s.inputSources) {
-    const gp = src.gamepad; if (!gp) continue;
+    const gp = src.gamepad; if (!gp || src.targetRayMode === 'screen') continue;
     const ax = gp.axes.length >= 4 ? [gp.axes[2], gp.axes[3]] : [gp.axes[0], gp.axes[1]];
+    const moving = Math.abs(ax[0]) > 0.15 || Math.abs(ax[1]) > 0.15;
     if (src.handedness === 'left') {
       const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
       const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
       const sp = (ar ? (XR.scale < 1 ? 0.3 : 1.0) : 1.6) * dt;
-      if (ar) world.position.addScaledVector(dir, -ax[1] * sp).addScaledVector(right, ax[0] * sp);   // arrasta a sala/maquete
+      if (ar) { if (XR.state === 'placed' && moving) { dropAnchor(); world.position.addScaledVector(dir, -ax[1] * sp).addScaledVector(right, ax[0] * sp); XR.manipT = performance.now(); XR.needAnchor = true; } }
       else rig.position.addScaledVector(dir, -ax[1] * sp).addScaledVector(right, ax[0] * sp);
+      const x = gp.buttons[4] && gp.buttons[4].pressed;                  // X: reposicionar
+      if (ar && x && !btnPrev.x) startPlacing();
+      btnPrev.x = x;
     } else if (src.handedness === 'right') {
       snapCool -= dt;
-      if (ar) { world.rotation.y -= ax[0] * dt * 0.8; if (XR.scale < 1) world.position.y -= ax[1] * dt * 0.2; }   // gira; na maquete ajusta a altura
-      else if (Math.abs(ax[0]) > 0.7 && snapCool <= 0) { rig.rotation.y -= Math.sign(ax[0]) * Math.PI / 6; snapCool = 0.35; }
+      if (ar) {
+        if (XR.state === 'placed' && moving) {
+          dropAnchor(); XR.yaw -= ax[0] * dt * 0.8; world.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), XR.yaw);
+          if (XR.scale < 1) world.position.y -= ax[1] * dt * 0.2;                                 // na maquete ajusta a altura
+          XR.manipT = performance.now(); XR.needAnchor = true;
+        }
+      } else if (Math.abs(ax[0]) > 0.7 && snapCool <= 0) { rig.rotation.y -= Math.sign(ax[0]) * Math.PI / 6; snapCool = 0.35; }
       const a = gp.buttons[4] && gp.buttons[4].pressed, b = gp.buttons[5] && gp.buttons[5].pressed;
       if (a && !btnPrev.a) togglePlay();
       if (b && !btnPrev.b) { const v = [1, 2, 4]; st.speed = v[(v.indexOf(st.speed) + 1) % 3]; $('spd').value = String(st.speed); }
-      btnPrev = { a, b };
+      btnPrev.a = a; btnPrev.b = b;
     }
   }
 }
@@ -655,10 +721,10 @@ function drawFases(t) {
 let last = performance.now(), acc = 0, prevT = 0;
 function update(t, dt, playing) {
   mixS.setTime(Math.min(t, gs.animations[0].duration - 1e-3));
-  for (const mn of MN) { const m = machines[mn]; m.act.time = clipTime(m.R, t).c; m.mixer.update(0); updateMachineProps(m, mn, t); }
+  for (const mn of MN) { const m = machines[mn]; m.act.time = clipTime(m.R, t).c; m.mixer.update(0); }
   for (const n in people) {
     const p = people[n]; if (!p.a) continue;
-    const vis = n !== 'SUPERVISOR' || R.sup_windows.some(([a, b]) => t >= a - 0.5 && t <= b + 0.3);
+    const vis = n !== 'SUPERVISOR' || (t >= R.sup_window[0] - 0.5 && t <= R.sup_window[1] + 0.3);
     p.a.visible = vis; p.blob.visible = vis;
     if (vis) { p.a.getWorldPosition(tmpV); world.worldToLocal(tmpV); p.blob.position.set(tmpV.x, 0.004, tmpV.z); }
   }
@@ -680,7 +746,7 @@ renderer.setAnimationLoop((now, frame) => {
   update(st.t, dt, st.playing);
   if (st.playing) triggerEvents(t0, st.t);
   updateAudio(st.t, t0, st.playing);
-  if (renderer.xr.isPresenting) { xrInput(dt); if (XR.mode === 'ar' && !XR.placed) arHit(frame); else if (XR.mode === 'ar') XR.reticle.visible = false; }
+  if (renderer.xr.isPresenting) { xrInput(dt); arFrame(frame, dt); }
   else {
     if (camMode === 'operadora') followCam('OPERADORA', dt);
     else if (camMode === 'supervisor') followCam('SUPERVISOR', dt);
@@ -702,6 +768,7 @@ window.__shot = (t, pos, tg) => {
   renderer.render(scene, camera); return true;
 };
 window.__scene = scene; window.__ready = true;
+window.__xrtest = { XR, arFrame, onSelectStart, onSelectEnd, startPlacing, world, rotateBy };
 window.__stop = () => renderer.setAnimationLoop(null);
 window.__info = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, audio: AC ? AC.state : 'sem áudio', t: st.t });
 window.__play = (t) => { initAudio(); st.t = t || 0; if (!st.playing) togglePlay(); };
