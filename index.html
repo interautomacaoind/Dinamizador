@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sala de Dinamização CMR</title>
+<style>
+  :root { --bg:#0f1419; --pn:rgba(18,24,32,.86); --tx:#e8eef3; --mu:#9fb0bf; --ac:#2fbf71; --ac2:#3d8bfd; --wr:#f5b31a; }
+  html,body { margin:0; height:100%; background:#1b2229; color:var(--tx); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  canvas { display:block; }
+  #load { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:var(--bg); z-index:20; }
+  #load .bar { width:min(420px,80vw); height:8px; background:#24303b; border-radius:6px; overflow:hidden; }
+  #load .bar i { display:block; height:100%; width:0; background:var(--ac); transition:width .2s; }
+  #start { display:none; padding:12px 26px; font-size:17px; border:0; border-radius:10px; background:var(--ac); color:#fff; cursor:pointer; }
+  #top { position:fixed; left:12px; top:10px; right:12px; display:flex; gap:10px; align-items:flex-start; pointer-events:none; z-index:5; }
+  #top .t { background:var(--pn); padding:8px 12px; border-radius:10px; pointer-events:auto; }
+  #top h1 { font-size:15px; margin:0 0 2px; font-weight:650; }
+  #top small { color:var(--mu); }
+  #fases { margin-left:auto; background:var(--pn); padding:8px 10px; border-radius:10px; font-size:12.5px; min-width:250px; pointer-events:auto; }
+  #fases div { display:flex; gap:8px; align-items:center; padding:1px 0; }
+  #fases b { width:26px; } #fases i { width:9px; height:9px; border-radius:50%; background:#666; display:inline-block; }
+  #bar { position:fixed; left:12px; right:12px; bottom:12px; background:var(--pn); border-radius:12px; padding:9px 12px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; z-index:5; }
+  #bar button, #bar select { background:#26323d; color:var(--tx); border:1px solid #3a4854; border-radius:8px; padding:6px 10px; font-size:14px; cursor:pointer; }
+  #bar button.on { background:var(--ac); border-color:var(--ac); }
+  #seek { flex:1 1 260px; accent-color:var(--ac); }
+  #clk { font-variant-numeric:tabular-nums; min-width:210px; color:var(--mu); }
+  #clk b { color:var(--tx); }
+  #vrslot { display:flex; } #vrslot button { position:static !important; transform:none !important; left:auto !important; bottom:auto !important; }
+  @media (max-width:700px) { #fases { display:none; } #clk { min-width:0; } }
+</style>
+<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/addons/":"./lib/addons/"}}</script>
+</head>
+<body>
+<div id="load">
+  <div style="font-size:18px;font-weight:650">Sala de Dinamização · 4 × CMR REV16</div>
+  <div class="bar"><i id="pg"></i></div>
+  <div id="lt" style="color:#9fb0bf">carregando modelos…</div>
+  <button id="start">▶ Iniciar com som</button>
+</div>
+<div id="top">
+  <div class="t"><h1>Sala de Dinamização 01 · 10 × 15 m</h1><small>Tempo acelerado 6× · mistura de 5 min simulados · som espacial</small></div>
+  <div id="fases"></div>
+</div>
+<div id="bar">
+  <button id="play" title="Reproduzir/pausar (espaço)">▶</button>
+  <select id="spd" title="Velocidade"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+  <input id="seek" type="range" min="0" max="100" step="0.1" value="0">
+  <span id="clk"></span>
+  <select id="cam" title="Câmera">
+    <option value="geral">Visão geral</option><option value="operadora">Seguir operadora</option><option value="supervisor">Seguir supervisor</option>
+    <option value="m1">Máquina M1</option><option value="tv">TV de indicadores</option><option value="tanque">Tanque TQ-01</option><option value="livre">Livre</option>
+  </select>
+  <button id="snd" class="on" title="Som">🔊</button>
+  <span id="vrslot"></span>
+  <small style="color:#9fb0bf;flex-basis:100%">VR: analógico esq. anda, dir. gira · AR 1:1 / maquete: gatilho posiciona no piso/mesa, analógico esq. arrasta, dir. gira · A = play/pausa · B = velocidade · Desktop: arraste para girar, roda do mouse aproxima</small>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
