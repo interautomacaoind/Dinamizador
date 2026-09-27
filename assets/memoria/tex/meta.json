@@ -1,0 +1,52 @@
+{
+ "prod_carrapat-100_20kg": {
+  "w": 467,
+  "h": 882,
+  "cor": "#b57f26"
+ },
+ "prod_cmr-vet_190g": {
+  "w": 327,
+  "h": 374,
+  "cor": "#d2cdcc"
+ },
+ "prod_dermosan-md_4kg": {
+  "w": 430,
+  "h": 719,
+  "cor": "#762c27"
+ },
+ "prod_dia-100_36g": {
+  "w": 116,
+  "h": 893,
+  "cor": "#bbaaa8"
+ },
+ "prod_entero-100_600g": {
+  "w": 555,
+  "h": 818,
+  "cor": "#032948"
+ },
+ "prod_figotonus-gel_250ml": {
+  "w": 484,
+  "h": 945,
+  "cor": "#a57895"
+ },
+ "prod_finintox_600g": {
+  "w": 553,
+  "h": 817,
+  "cor": "#03284e"
+ },
+ "prod_matrimax-gel_250ml": {
+  "w": 482,
+  "h": 940,
+  "cor": "#9c8ba7"
+ },
+ "prod_parasit-100_600g": {
+  "w": 239,
+  "h": 356,
+  "cor": "#062342"
+ },
+ "prod_sodo-100_20kg": {
+  "w": 468,
+  "h": 886,
+  "cor": "#b85441"
+ }
+}
