@@ -925,117 +925,155 @@ const SR = (() => {
   const L1 = new THREE.PointLight(0xffe9c7, 6, 7, 1.6); L1.position.copy(Bv(-2.5, -6.8, 2.8)); G.add(L1);
   const L2 = new THREE.PointLight(0xffe9c7, 6, 7, 1.6); L2.position.copy(Bv(-2.5, -9.0, 2.8)); G.add(L2);
   // ---- quadros (história – fontes públicas: gruporealbr.com.br, cmrsaude.com.br, Campo Grande News, O Presente Rural)
-  function icon(g, kind, x, y, s) {
-    g.save(); g.translate(x, y); g.scale(s, s); g.fillStyle = VERDE; g.strokeStyle = VERDE; g.lineWidth = 6;
-    if (kind === 'loja') { g.fillRect(-60, -10, 120, 70); g.beginPath(); g.moveTo(-75, -10); g.lineTo(0, -60); g.lineTo(75, -10); g.fill(); g.fillStyle = CREME; g.fillRect(-15, 20, 30, 40); g.fillRect(-50, 5, 25, 20); g.fillRect(25, 5, 25, 20); }
-    else if (kind === 'boi') { g.beginPath(); g.ellipse(0, 10, 62, 34, 0, 0, 7); g.fill(); g.fillRect(-50, 30, 12, 40); g.fillRect(-20, 30, 12, 40); g.fillRect(18, 30, 12, 40); g.fillRect(44, 30, 12, 40);
-      g.beginPath(); g.ellipse(70, -12, 22, 18, 0.3, 0, 7); g.fill(); g.beginPath(); g.moveTo(60, -28); g.lineTo(52, -48); g.lineTo(70, -30); g.fill(); g.beginPath(); g.moveTo(80, -26); g.lineTo(92, -44); g.lineTo(86, -24); g.fill(); }
-    else if (kind === 'frasco') { g.fillRect(-26, -20, 52, 80); g.fillRect(-12, -44, 24, 26); g.fillStyle = CREME; g.fillRect(-18, 0, 36, 30); g.fillStyle = DOURADO; g.beginPath(); g.arc(0, -60, 10, 0, 7); g.fill(); }
-    else if (kind === 'fabrica') { g.fillRect(-80, 0, 160, 60); g.beginPath(); g.moveTo(-80, 0); g.lineTo(-40, -30); g.lineTo(-40, 0); g.lineTo(0, -30); g.lineTo(0, 0); g.lineTo(40, -30); g.lineTo(40, 0); g.fill(); g.fillRect(52, -70, 18, 70); g.fillStyle = '#aab'; g.beginPath(); g.arc(66, -86, 14, 0, 7); g.arc(82, -100, 10, 0, 7); g.fill(); }
-    else if (kind === 'pata') { g.beginPath(); g.ellipse(0, 22, 34, 28, 0, 0, 7); g.fill(); for (const [a, b] of [[-38, -18], [-14, -36], [14, -36], [38, -18]]) { g.beginPath(); g.ellipse(a, b, 13, 17, 0, 0, 7); g.fill(); } }
-    else if (kind === 'globo') { g.beginPath(); g.arc(0, 0, 60, 0, 7); g.stroke(); g.beginPath(); g.ellipse(0, 0, 26, 60, 0, 0, 7); g.stroke(); g.beginPath(); g.moveTo(-60, 0); g.lineTo(60, 0); g.moveTo(-52, -30); g.lineTo(52, -30); g.moveTo(-52, 30); g.lineTo(52, 30); g.stroke(); }
-    else if (kind === 'cmr') { g.font = 'bold 110px Georgia,serif'; g.textAlign = 'center'; g.fillText('CMR', 0, 30); g.fillStyle = DOURADO; g.fillRect(-110, 48, 220, 8); }
-    else if (kind === 'hoje') { for (let i = 0; i < 5; i++) g.fillRect(-80 + i * 34, 40 - i * 22, 24, 22 + i * 22); }
-    g.restore();
+  // ---- imagens oficiais (assets/memoria): fotos da linha do tempo e do fundador (gruporealbr.com.br) e produtos (cmrsaude.com.br)
+  const MEM = 'assets/memoria/', TEX = MEM + 'tex/';
+  const texL = new THREE.TextureLoader();
+  const tx = (f) => { const t = texL.load(TEX + f); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+  const loadImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+  const FR = new THREE.MeshStandardMaterial({ color: 0x3b2413, roughness: 0.45 });
+  function moldura(grp, w, h, b = 0.05) {
+    const fr = (x0, x1, y0, y1) => { const o = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, 0.045), FR); o.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.012); grp.add(o); };
+    fr(-w / 2 - b, w / 2 + b, h / 2, h / 2 + b); fr(-w / 2 - b, w / 2 + b, -h / 2 - b, -h / 2); fr(-w / 2 - b, -w / 2, -h / 2, h / 2); fr(w / 2, w / 2 + b, -h / 2, h / 2);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.012), FR); back.position.z = -0.002; grp.add(back);
   }
-  function quadro(ano, titulo, texto, ic, w = 0.9, h = 0.68) {
-    const tex = canvasTex(1024, 776, (g, W, H) => {
-      g.fillStyle = CREME; g.fillRect(0, 0, W, H); g.fillStyle = VERDE; g.fillRect(0, 0, W, 16); g.fillRect(0, H - 16, W, 16);
-      icon(g, ic, 190, 250, 1.35);
-      g.fillStyle = DOURADO; g.font = 'bold 120px Georgia,serif'; g.textAlign = 'left'; g.fillText(ano, 370, 170);
-      g.fillStyle = TINTA; g.font = 'bold 48px Georgia,serif'; wrap(g, titulo, 370, 245, 610, 56);
-      g.font = '36px Georgia,serif'; g.fillStyle = '#34453c'; wrap(g, texto, 60, 470, 904, 46);
-    });
-    const grp = new THREE.Group();
-    const FR = new THREE.MeshStandardMaterial({ color: 0x3b2413, roughness: 0.5 });
-    const fr = (x0, x1, y0, y1) => { const o = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, 0.04), FR); o.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0.01); grp.add(o); };
-    fr(-w / 2 - 0.05, w / 2 + 0.05, h / 2, h / 2 + 0.05); fr(-w / 2 - 0.05, w / 2 + 0.05, -h / 2 - 0.05, -h / 2); fr(-w / 2 - 0.05, -w / 2, -h / 2, h / 2); fr(w / 2, w / 2 + 0.05, -h / 2, h / 2);
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 })); p.position.z = 0.012; grp.add(p);
+  // quadro com foto histórica + ano + legenda (passe-partout creme)
+  function quadroFoto(ano, texto, foto, w = 0.9, h = 0.8) {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * h / w);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+    const PW = 944, PH = 560, PX = 40, PY = 40;
+    const draw = (img) => {
+      const g = c.getContext('2d'); g.fillStyle = CREME; g.fillRect(0, 0, c.width, c.height);
+      g.fillStyle = '#d8d0c0'; g.fillRect(PX - 6, PY - 6, PW + 12, PH + 12); g.fillStyle = '#2a2a2a'; g.fillRect(PX, PY, PW, PH);
+      if (img) { const s = Math.min(PW / img.width, PH / img.height), iw = img.width * s, ih = img.height * s;
+        g.filter = 'blur(18px) brightness(.55)'; const s2 = Math.max(PW / img.width, PH / img.height); g.save(); g.beginPath(); g.rect(PX, PY, PW, PH); g.clip();
+        g.drawImage(img, PX + (PW - img.width * s2) / 2, PY + (PH - img.height * s2) / 2, img.width * s2, img.height * s2); g.restore(); g.filter = 'none';
+        g.drawImage(img, PX + (PW - iw) / 2, PY + (PH - ih) / 2, iw, ih); }
+      g.fillStyle = DOURADO; g.font = 'bold 92px Georgia,serif'; g.textAlign = 'left'; g.fillText(ano, PX, PY + PH + 100);
+      g.fillStyle = TINTA; g.font = '40px Georgia,serif'; wrap(g, texto, PX + 250, PY + PH + 62, PW - 250, 48);
+      g.fillStyle = '#7a7466'; g.font = 'italic 22px Georgia,serif'; g.fillText('Acervo Grupo Real', PX, c.height - 22);
+      t.needsUpdate = true;
+    };
+    draw(null); loadImg(MEM + foto).then(draw);
+    const grp = new THREE.Group(); moldura(grp, w, h);
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.75 })); p.position.z = 0.006; grp.add(p);
     return grp;
   }
-  const frames = [
-    // parede oeste (x = -5), olhando para +x
-    ['1985', 'Início em Ribas do Rio Pardo (MS)', 'Em fevereiro de 1985 a família Real abre uma pequena loja de produtos veterinários, em meio a uma crise de mortalidade no rebanho da região.', 'loja', 'O', -6.2],
-    ['1987', 'Nasce a Homeopatia Populacional', 'O Prof. Dr. Claudio Martins Real estuda a mortalidade do gado em MS (1986) e concebe o método: a homeopatia, individual e curativa, torna-se coletiva e preventiva.', 'boi', 'O', -7.35],
-    ['1989', 'Fábrica de Sal Mineralizado Real', 'Inauguração da fábrica e início dos trabalhos experimentais de longa duração: nutrição e saúde animal caminhando juntas.', 'fabrica', 'O', -8.5],
-    ['2009', 'Linha Homeopet', 'A experiência chega aos animais de companhia: produtos homeopáticos para cães e gatos.', 'pata', 'O', -9.45],
-    // parede leste (x = 0), olhando para -x
-    ['2019', 'Além das fronteiras', 'Ampliação das exportações para Bolívia e Guatemala; presença também no Paraguai, México e Colômbia.', 'globo', 'L', -9.45],
-    ['2023', 'Nasce a marca CMR Saúde', 'Apresentada na Expogrande 2023, a CMR — Claudio Martins Real — reúne as linhas de saúde para animais de produção.', 'cmr', 'L', -8.5],
-    ['Hoje', 'Grupo Real: Real H · CMR Saúde · Homeopet', 'Sede em Campo Grande (75 mil m²), fábrica em Cuiabá, centros de distribuição, mais de 330 profissionais e produtos em mais de 15 milhões de bovinos.', 'hoje', 'L', -7.35],
-    ['Lab.', 'Maior laboratório de homeopatia veterinária da América Latina', 'Pesquisa, produção e dinamização: é aqui que nasce a necessidade das dinamizadoras CMR que você acabou de operar.', 'frasco', 'L', -6.2],
+  const frames = [                         // linha do tempo oficial (gruporealbr.com.br/quem-somos)
+    ['1985', 'Abertura da loja de produtos veterinários em Ribas do Rio Pardo (MS)', 'hist_1985_0.jpg', 'O', -6.2],
+    ['1986', 'Estudo da mortalidade de bovinos em Mato Grosso do Sul', 'hist_1986_1.jpg', 'O', -7.35],
+    ['1989', 'Inauguração da Fábrica de Sal Mineralizado Real em Ribas do Rio Pardo', 'hist_1989_2.jpg', 'O', -8.5],
+    ['1991', 'Experimento comprova a eficácia em rebanhos: nasce a Homeopatia Populacional', 'hist_1991_3.jpg', 'O', -9.45],
+    ['1996', 'A Real H vem para Campo Grande (MS)', 'hist_1996_4.jpg', 'L', -9.45],
+    ['2009', 'Lançamento da linha Homeopet', 'hist_2009_12.jpg', 'L', -8.5],
+    ['2019', 'Início das exportações para Guatemala e Bolívia', 'hist_2019_17.jpg', 'L', -7.35],
+    ['2023', 'Lançada a marca CMR, em homenagem ao Prof. Dr. Claudio Martins Real', 'hist_2023_21.jpg', 'L', -6.2],
   ];
-  for (const [ano, tit, tx, ic, lado, y] of frames) {
-    const q = quadro(ano, tit, tx, ic);
-    if (lado === 'O') { q.position.copy(Bv(RX0 + 0.03, y, 1.75)); q.rotation.y = Math.PI / 2; } else { q.position.copy(Bv(RX1 - 0.03, y, 1.75)); q.rotation.y = -Math.PI / 2; }
+  for (const [ano, tx_, foto, lado, y] of frames) {
+    const q = quadroFoto(ano, tx_, foto);
+    if (lado === 'O') { q.position.copy(Bv(RX0 + 0.03, y, 1.72)); q.rotation.y = Math.PI / 2; } else { q.position.copy(Bv(RX1 - 0.03, y, 1.72)); q.rotation.y = -Math.PI / 2; }
     G.add(q);
   }
-  // parede do fundo (y = -10): título + fundador
+  // parede do fundo (y = -10): título + retrato do fundador + placa
   const titulo = canvasTex(2048, 512, (g, w, h) => { g.fillStyle = VERDE; g.fillRect(0, 0, w, h); g.strokeStyle = DOURADO; g.lineWidth = 14; g.strokeRect(24, 24, w - 48, h - 48);
     g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 150px Georgia,serif'; g.fillText('GRUPO REAL', w / 2, 210); g.fillStyle = DOURADO; g.font = '76px Georgia,serif';
     g.fillText('Real H  ·  CMR Saúde  ·  Homeopet', w / 2, 320); g.fillStyle = '#e8efe9'; g.font = 'italic 54px Georgia,serif'; g.fillText('Nutrição e saúde animal desde 1985 · Campo Grande – MS', w / 2, 420); });
-  plane(3.0, 0.75, titulo, Bv(-2.5, RY0 + 0.01, 2.55), Math.PI);
-  const fund = canvasTex(1024, 1024, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#d9cfbd'; g.beginPath(); g.arc(w / 2, 330, 190, 0, 7); g.fill(); g.fillStyle = VERDE; g.beginPath(); g.arc(w / 2, 300, 105, 0, 7); g.fill(); g.beginPath(); g.ellipse(w / 2, 520, 190, 120, 0, Math.PI, 0); g.fill();
-    g.textAlign = 'center'; g.fillStyle = TINTA; g.font = 'bold 60px Georgia,serif'; g.fillText('Prof. Dr. Claudio Martins Real', w / 2, 650);
-    g.fillStyle = DOURADO; g.font = '44px Georgia,serif'; g.fillText('Médico-veterinário · fundador e presidente', w / 2, 715);
-    g.fillStyle = '#34453c'; g.font = 'italic 40px Georgia,serif'; wrap(g, 'Pioneiro da homeopatia populacional. A sigla CMR homenageia o seu nome.', w / 2, 800, 860, 50);
-    g.font = '28px Georgia,serif'; g.fillStyle = '#6b746e'; g.fillText('(ilustração)', w / 2, 960); });
-  const qf = new THREE.Group(); const FR2 = new THREE.MeshStandardMaterial({ color: 0x3b2413, roughness: 0.5 });
-  const fb = new THREE.Mesh(new THREE.BoxGeometry(1.08, 1.08, 0.04), FR2); qf.add(fb);
-  const fp = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.98), new THREE.MeshStandardMaterial({ map: fund, roughness: 0.8 })); fp.position.z = 0.022; qf.add(fp);
-  qf.position.copy(Bv(-2.5, RY0 + 0.03, 1.45)); qf.rotation.y = Math.PI; G.add(qf);
-  const fonte = canvasTex(1024, 128, (g, w, h) => { g.fillStyle = '#173a2c'; g.fillRect(0, 0, w, h); g.fillStyle = '#cfd9d2'; g.font = '26px system-ui'; g.textAlign = 'center';
-    g.fillText('Fontes públicas: gruporealbr.com.br · cmrsaude.com.br · Campo Grande News · O Presente Rural', w / 2, 52);
-    g.fillText('Embalagens e ilustrações meramente ilustrativas — consulte o catálogo oficial', w / 2, 96); });
-  plane(0.9, 0.11, fonte, Bv(-1.2, RY0 + 0.012, 0.85), Math.PI);
-  // ---- vitrine de produtos (2 balcões, 4 produtos cada)
-  const PRODUTOS = [
-    { nome: 'CMR VET', sub: 'Pomada cicatrizante homeopática', ind: 'Ferimentos e cicatrização', fmt: 'pote', cor: '#0f5132' },
-    { nome: 'Homeopet', sub: 'Pomada para cães e gatos', ind: 'Cuidados da pele e feridas em pets', fmt: 'bisnaga', cor: '#1f6fb2' },
-    { nome: 'Carrapat 100', sub: 'Homeopatia populacional', ind: 'Prevenção e redução de carrapatos', fmt: 'balde', cor: '#7a3e12' },
-    { nome: 'Parasit 100', sub: 'Homeopatia populacional', ind: 'Carrapatos, moscas e vermes', fmt: 'balde', cor: '#5d2d7a' },
-    { nome: 'Sacsom', sub: 'Homeopatia populacional', ind: 'Controle de moscas', fmt: 'saco', cor: '#8a6d12' },
-    { nome: 'Sodo 100', sub: 'Homeopatia populacional', ind: 'Prevenção de distúrbios de comportamento', fmt: 'saco', cor: '#284f7a' },
-    { nome: 'Pró-Cio', sub: 'Homeopatia populacional', ind: 'Fertilidade e reprodução', fmt: 'balde', cor: '#a12a4a' },
-    { nome: 'Dermosan MD', sub: 'Saúde da pele', ind: 'Afecções de pele', fmt: 'frasco', cor: '#2a7a6b' },
-  ];
-  const labelTex = (p) => canvasTex(512, 512, (g, w, h) => { g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.fillStyle = p.cor; g.fillRect(0, 0, w, 150); g.fillRect(0, h - 70, w, 70);
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 34px system-ui'; g.fillText('CMR SAÚDE ANIMAL', w / 2, 58); g.font = '26px system-ui'; g.fillText(p.nome === 'Homeopet' ? 'Grupo Real' : 'Grupo Real · Real H', w / 2, 108);
-    g.fillStyle = p.cor; let px = 76; g.font = `bold ${px}px system-ui`; while (g.measureText(p.nome).width > 470) { px -= 4; g.font = `bold ${px}px system-ui`; } g.fillText(p.nome, w / 2, 250);
-    g.fillStyle = '#333'; g.font = '30px system-ui'; wrap(g, p.sub, w / 2, 310, 460, 36); g.font = 'italic 26px system-ui'; g.fillStyle = '#666'; g.fillText('embalagem ilustrativa', w / 2, h - 25); });
-  const cardTex = (p) => canvasTex(512, 200, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h); g.fillStyle = VERDE; g.fillRect(0, 0, 10, h);
-    g.fillStyle = TINTA; g.font = 'bold 40px Georgia,serif'; g.fillText(p.nome, 28, 58); g.font = '28px Georgia,serif'; g.fillStyle = '#34453c'; wrap(g, p.ind, 28, 110, 460, 34); });
-  function pack(p) {
-    const tex = labelTex(p), grp = new THREE.Group();
-    const side = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 }), plain = new THREE.MeshStandardMaterial({ color: new THREE.Color(p.cor), roughness: 0.5 }), white = new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 0.4 });
-    let h = 0.2;
-    if (p.fmt === 'pote') { h = 0.1; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.08, 32), [side, white, white]); b.position.y = 0.04; grp.add(b); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.022, 32), plain); c.position.y = 0.09; grp.add(c); }
-    else if (p.fmt === 'bisnaga') { h = 0.19; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.16, 24), [side, white, white]); b.position.y = 0.1; grp.add(b); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.03, 16), plain); c.position.y = 0.015; grp.add(c); const f = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.012, 0.012), white); f.position.y = 0.185; grp.add(f); }
-    else if (p.fmt === 'balde') { h = 0.26; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.095, 0.22, 36, 1, true), side); b.position.y = 0.11; grp.add(b); const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.01, 36), white); bt.position.y = 0.005; grp.add(bt); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.03, 36), plain); c.position.y = 0.235; grp.add(c);
-      const a = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.004, 6, 24, Math.PI), white); a.position.y = 0.25; grp.add(a); }
-    else if (p.fmt === 'saco') { h = 0.3; const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.28, 0.08), [plain, plain, white, white, side, side]); b.position.y = 0.14; grp.add(b); const s = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.03), plain); s.position.y = 0.29; grp.add(s); }
-    else { h = 0.2; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.042, 0.15, 28), [side, white, white]); b.position.y = 0.075; grp.add(b); const n = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.03, 0.03, 20), white); n.position.y = 0.165; grp.add(n); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 20), plain); c.position.y = 0.195; grp.add(c); }
-    grp.rotation.y = Math.PI; grp.userData.h = h; return grp;
+  plane(3.0, 0.75, titulo, Bv(-2.5, RY0 + 0.01, 2.62), Math.PI);
+  const qf = new THREE.Group(); moldura(qf, 0.8, 0.906, 0.06);
+  const fotoF = tx('fundador_claudio_martins_real.jpg');
+  const fp = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.906), new THREE.MeshStandardMaterial({ map: fotoF, roughness: 0.6 })); fp.position.z = 0.006; qf.add(fp);
+  qf.position.copy(Bv(-2.5, RY0 + 0.035, 1.58)); qf.rotation.y = Math.PI; G.add(qf);
+  const spotF = new THREE.SpotLight(0xfff1dc, 6, 4, 0.5, 0.6, 1.5); spotF.position.copy(Bv(-2.5, RY0 + 1.4, 3.1)); spotF.target.position.copy(Bv(-2.5, RY0, 1.55)); G.add(spotF, spotF.target);
+  const placa = canvasTex(1024, 300, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#d9b86a'); gr.addColorStop(0.5, '#b8923e'); gr.addColorStop(1, '#9c7a2e'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#6e5320'; g.lineWidth = 8; g.strokeRect(10, 10, w - 20, h - 20); g.textAlign = 'center'; g.fillStyle = '#2b2110';
+    g.font = 'bold 60px Georgia,serif'; g.fillText('Prof. Dr. Claudio Martins Real', w / 2, 88); g.font = '34px Georgia,serif';
+    g.fillText('1926 · Médico-veterinário · Fundador e Presidente do Grupo Real', w / 2, 150);
+    g.font = 'italic 32px Georgia,serif'; g.fillText('Pioneiro e criador do termo Homeopatia Populacional.', w / 2, 205); g.fillText('A marca CMR leva as suas iniciais.', w / 2, 250); });
+  const pl = plane(0.62, 0.18, placa, Bv(-2.5, RY0 + 0.02, 0.93), Math.PI); pl.material.metalness = 0.6; pl.material.roughness = 0.35;
+  const fonte = canvasTex(1024, 128, (g, w, h) => { g.fillStyle = '#173a2c'; g.fillRect(0, 0, w, h); g.fillStyle = '#cfd9d2'; g.font = '25px system-ui'; g.textAlign = 'center';
+    g.fillText('Fotos e embalagens: acervo Grupo Real (gruporealbr.com.br) e catálogo CMR Saúde (cmrsaude.com.br)', w / 2, 52);
+    g.fillText('Uso interno · consulte a bula e o médico-veterinário', w / 2, 96); });
+  plane(0.9, 0.11, fonte, Bv(-1.1, RY0 + 0.012, 1.3), Math.PI);
+  // ---- vitrine CMR Saúde: embalagens reais (fotos do catálogo oficial) em escala real
+  const BALC = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.45 }), TOPO = new THREE.MeshStandardMaterial({ color: 0xf2eee6, roughness: 0.25 });
+  const PLINTO = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.3 }), ACR = new THREE.MeshStandardMaterial({ color: 0xe8f2f6, roughness: 0.05, transparent: true, opacity: 0.35 });
+  const shadowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 6, 64, 64, 62); gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+  const sombra = (grp, w, d) => { const s = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.5, d * 1.5), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })); s.rotation.x = -Math.PI / 2; s.position.y = 0.002; grp.add(s); };
+  // recorte (foto sem fundo) na frente + volume atrás (dá profundidade quando se olha de lado)
+  function recorte(file, hM, wpx, hpx, vol) {
+    const grp = new THREE.Group(), w = hM * wpx / hpx;
+    const m = new THREE.MeshStandardMaterial({ map: tx(file), alphaTest: 0.45, roughness: 0.42, side: THREE.DoubleSide });
+    const cor = new THREE.MeshStandardMaterial({ color: vol.cor, roughness: vol.rough ?? 0.5, metalness: vol.metal ?? 0 });
+    let zf = 0.01;
+    if (vol.tipo === 'saco') { const d = vol.d; const b = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, hM * 0.93, d), cor); b.position.set(0, hM * 0.47, -d / 2); grp.add(b); zf = 0.004; sombra(grp, w, d); }
+    else if (vol.tipo === 'frasco') { const r = w * 0.44; const b = new THREE.Mesh(new THREE.CylinderGeometry(r, r, hM * 0.68, 28), cor); b.position.set(0, hM * 0.34, -r * 0.2); grp.add(b);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, hM * 0.12, 20), new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.4 })); cap.position.set(0, hM * 0.88, -r * 0.2); grp.add(cap); zf = r * 0.82; sombra(grp, w, w); }
+    else if (vol.tipo === 'seringa') { const b = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.3, w * 0.3, hM * 0.9, 16), ACR); b.position.y = hM * 0.47; grp.add(b); zf = 0.002; }
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, hM), m); p.position.set(0, hM / 2, zf); grp.add(p);
+    grp.userData.h = hM; return grp;
   }
-  const BALC = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.45 }), TOPO = new THREE.MeshStandardMaterial({ color: 0xece6da, roughness: 0.3 });
+  // caixa 3D: frente e lateral com as faces da embalagem
+  function caixa(nome, hM, fw, fh, cor) {
+    const w = hM * fw / fh, d = w * 0.55, fr = tx(`box_${nome}_frente.jpg`), ld = tx(`box_${nome}_lado.jpg`);
+    const F = new THREE.MeshStandardMaterial({ map: fr, roughness: 0.45 }), Ld = new THREE.MeshStandardMaterial({ map: ld, roughness: 0.45 }), T = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.5 });
+    const grp = new THREE.Group(); const b = new THREE.Mesh(new THREE.BoxGeometry(w, hM, d), [Ld, Ld, T, T, F, F]); b.position.y = hM / 2; grp.add(b); sombra(grp, w, d); grp.userData.h = hM; return grp;
+  }
+  // pote cilíndrico: rótulo projetado (ortográfico) na metade da frente
+  function pote(file, r, hM, wpx, hpx) {
+    const grp = new THREE.Group(), BR = new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 0.3 });
+    const g1 = new THREE.CylinderGeometry(r, r, hM, 48, 1, true, -Math.PI / 2, Math.PI);
+    const pos = g1.attributes.position, uv = g1.attributes.uv; for (let i = 0; i < pos.count; i++) uv.setX(i, 0.5 + pos.getX(i) / (2 * r));
+    const hLab = 2 * r * hpx / wpx;
+    const L = new THREE.Mesh(g1, new THREE.MeshStandardMaterial({ map: tx(file), roughness: 0.3 })); L.position.y = hM / 2; L.scale.y = 1; grp.add(L);
+    const back = new THREE.Mesh(new THREE.CylinderGeometry(r, r, hM, 48, 1, true, Math.PI / 2, Math.PI), BR); back.position.y = hM / 2; grp.add(back);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.03, r * 1.03, 0.024, 48), BR); lid.position.y = hM + 0.012; grp.add(lid);
+    const bot = new THREE.Mesh(new THREE.CircleGeometry(r, 32), BR); bot.rotation.x = Math.PI / 2; bot.position.y = 0.001; grp.add(bot);
+    sombra(grp, 2 * r, 2 * r); grp.userData.h = hM + 0.024; grp.userData.hLab = hLab; return grp;
+  }
+  const PRODUTOS = [
+    { nome: 'CMR VET', extra: [[-0.09, -0.07], [0.09, -0.07]], ind: 'Pomada cicatrizante homeopática · 190 g', mk: () => pote('pote_cmr-vet_rotulo.jpg', 0.042, 0.09, 323, 346) },
+    { nome: 'Figotonus Gel', extra: [[-0.08, -0.08]], ind: 'Insuficiência hepática · 250 mL', mk: () => recorte('recorte_figotonus-gel_250ml.webp', 0.16, 484, 945, { tipo: 'frasco', cor: 0x7a3d0c, rough: 0.15, metal: 0.1 }) },
+    { nome: 'Matrimax Gel', extra: [[0.08, -0.08]], ind: 'Expulsão da placenta e involução uterina · 250 mL', mk: () => recorte('recorte_matrimax-gel_250ml.webp', 0.16, 482, 940, { tipo: 'frasco', cor: 0x7a3d0c, rough: 0.15, metal: 0.1 }) },
+    { nome: 'Dia 100', ind: 'Prevenção e tratamento de diarreias · 36 g', mk: () => recorte('recorte_dia-100_36g.webp', 0.23, 116, 893, { tipo: 'seringa', cor: 0xffffff }) },
+    { nome: 'Entero 100', extra: [[-0.12, -0.08]], ind: 'Enterites e diarreias · 600 g', mk: () => caixa('entero-100_600g', 0.2, 399, 766, 0x032948) },
+    { nome: 'Finintox', extra: [[0.12, -0.08]], ind: 'Intoxicações, inclusive por plantas tóxicas · 600 g', mk: () => caixa('finintox_600g', 0.2, 397, 765, 0x03284e) },
+    { nome: 'Parasit 100', extra: [[-0.12, -0.08]], ind: 'Vermes, carrapatos e moscas · 600 g', mk: () => caixa('parasit-100_600g', 0.2, 168, 334, 0x062342) },
+    { nome: 'Dermosan MD', ind: 'Dermatites e papilomatose · 4 kg', mk: () => recorte('recorte_dermosan-md_4kg.webp', 0.42, 430, 719, { tipo: 'saco', cor: 0x3a1512, d: 0.09 }) },
+    { nome: 'Carrapat 100', ind: 'Controle de carrapatos · 20 kg', mk: () => recorte('recorte_carrapat-100_20kg.webp', 0.8, 467, 882, { tipo: 'saco', cor: 0x9a6a1e, d: 0.2 }) },
+    { nome: 'Sodo 100', ind: 'Reduz a sodomia · 20 kg', mk: () => recorte('recorte_sodo-100_20kg.webp', 0.8, 468, 886, { tipo: 'saco', cor: 0x9c4434, d: 0.2 }) },
+  ];
+  const cardTex = (p) => canvasTex(512, 200, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h); g.fillStyle = '#c8102e'; g.fillRect(0, 0, 10, h);
+    g.fillStyle = '#123a73'; let px = 42; g.font = `bold ${px}px system-ui`; while (g.measureText(p.nome).width > 470 && px > 20) { px -= 2; g.font = `bold ${px}px system-ui`; } g.fillText(p.nome, 28, 58);
+    g.font = '27px system-ui'; g.fillStyle = '#34453c'; wrap(g, p.ind, 28, 106, 460, 32); g.font = 'italic 20px system-ui'; g.fillStyle = '#7a7466'; g.fillText('CMR Saúde Animal · Grupo Real', 28, 186); });
   const products = [];
+  const CY0 = -5.9, CY1 = -8.95;                               // balcões encurtados: os cantos do fundo recebem os sacos de 20 kg
   const counters = [{ x: -4.45, rot: Math.PI / 2 }, { x: -0.55, rot: -Math.PI / 2 }];
-  PRODUTOS.forEach((p, i) => {
-    const cN = i < 4 ? 0 : 1, C = counters[cN], y = -6.25 - (i % 4) * 1.05;
-    if (i % 4 === 0) {                 // balcão (4 nichos)
-      box(C.x - 0.3, C.x + 0.3, -9.55, -5.9, 0, 0.9, BALC); box(C.x - 0.32, C.x + 0.32, -9.57, -5.88, 0.9, 0.93, TOPO);
-    }
-    const o = pack(p); o.position.copy(Bv(C.x, y, 0.93)); o.rotation.y = C.rot + Math.PI; G.add(o);
-    const card = plane(0.26, 0.1, cardTex(p), Bv(C.x + (cN ? -0.301 : 0.301), y, 0.78), cN ? -Math.PI / 2 : Math.PI / 2);
-    const home = { pos: o.position.clone(), q: o.quaternion.clone(), parent: G };
-    products.push({ obj: o, p, home, card });
+  for (const C of counters) { box(C.x - 0.3, C.x + 0.3, CY1, CY0, 0, 0.9, BALC); box(C.x - 0.32, C.x + 0.32, CY1 - 0.02, CY0 + 0.02, 0.9, 0.93, TOPO);
+    const fita = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.012, CY0 - CY1), new THREE.MeshBasicMaterial({ color: 0xfff1d6 })); fita.position.copy(Bv(C.x + (C.x < -2.5 ? 0.3 : -0.3), (CY0 + CY1) / 2, 0.9)); G.add(fita); }
+  const add = (p, pos, rotY, cardPos, cardRot, plinto) => {
+    if (plinto) { const pb = new THREE.Mesh(new THREE.BoxGeometry(0.42, plinto, 0.3), PLINTO); pb.rotation.y = rotY; pb.position.copy(pos).add(new THREE.Vector3(0, plinto / 2, 0)); G.add(pb); pos = pos.clone().add(new THREE.Vector3(0, plinto, 0)); }
+    const o = p.mk(); o.position.copy(pos); o.rotation.y = rotY; G.add(o);
+    for (const [dx, dz] of (p.extra || [])) { const c = o.clone(true); c.position.copy(pos).add(new THREE.Vector3(dx, 0, dz).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY)); c.rotation.y = rotY + (dx > 0 ? -0.12 : 0.12); G.add(c); }
+    const card = plane(0.26, 0.1, cardTex(p), cardPos, cardRot);
+    products.push({ obj: o, p, home: { pos: o.position.clone(), q: o.quaternion.clone(), parent: G }, card });
+  };
+  PRODUTOS.slice(0, 8).forEach((p, i) => {
+    const cN = i < 4 ? 0 : 1, C = counters[cN], y = -6.3 - (i % 4) * 0.8;
+    add(p, Bv(C.x, y, 0.93), C.rot, Bv(C.x + (cN ? -0.301 : 0.301), y, 0.78), cN ? -Math.PI / 2 : Math.PI / 2, p.nome === 'Dermosan MD' ? 0 : 0.05);
+  });
+  // sacos de 20 kg sobre estrado de madeira, nos cantos do fundo, voltados para a porta
+  const MAD = new THREE.MeshStandardMaterial({ color: 0x9a7048, roughness: 0.8 });
+  [[PRODUTOS[8], -4.3], [PRODUTOS[9], -0.7]].forEach(([p, x]) => {
+    for (const [dx, dz] of [[-0.3, 0.1], [0.3, 0.1], [-0.3, -0.1], [0.3, -0.1]]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), MAD); r.position.copy(Bv(x + dx, -9.5 + dz, 0.05)); G.add(r); }
+    const tb = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.025, 0.6), MAD); tb.position.copy(Bv(x, -9.5, 0.112)); G.add(tb);
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.9, 8), INOX); poste.position.copy(Bv(x + (x < -2.5 ? 0.55 : -0.55), -9.2, 0.45)); G.add(poste);
+    add(p, Bv(x, -9.5, 0.125), Math.PI, Bv(x + (x < -2.5 ? 0.55 : -0.55), -9.21, 0.93), Math.PI, 0);
   });
   // ---- miniatura 1:5 da dinamizadora CMR REV17 no centro
   const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.75, 40), BALC); ped.position.copy(Bv(-2.5, -7.9, 0.375)); G.add(ped);
   const pedTop = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.03, 40), TOPO); pedTop.position.copy(Bv(-2.5, -7.9, 0.765)); G.add(pedTop);
   const mini = gm.scene.clone(true); mini.scale.setScalar(0.2); mini.position.copy(Bv(-2.5 - 0.02, -7.9, 0.78)); G.add(mini);
   const miniTag = plane(0.5, 0.13, canvasTex(768, 200, (g, w, h) => { g.fillStyle = CREME; g.fillRect(0, 0, w, h); g.fillStyle = VERDE; g.textAlign = 'center'; g.font = 'bold 56px Georgia,serif'; g.fillText('Dinamizadora CMR · REV17', w / 2, 88); g.fillStyle = '#34453c'; g.font = '38px Georgia,serif'; g.fillText('miniatura 1:5 · 6 garrafões de 5 L', w / 2, 158); }), Bv(-2.5, -7.43, 0.55), Math.PI);
+  plane(0.5, 0.1, canvasTex(768, 150, (g, w, h) => { g.fillStyle = VERDE; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '30px Georgia,serif'; g.fillText('Maior indústria de medicamentos homeopáticos', w / 2, 60); g.fillText('veterinários da América Latina · Campo Grande – MS', w / 2, 108); }), Bv(-2.5, -8.37, 0.5), 0);
   // ---- abrir / fechar a porta
   let open = 0, target = 0;
   function toggle() { target = target ? 0 : 1; if (typeof oneShot === 'function' && AC && SND) oneShot(audio.door || scene, target ? SND.dooro : SND.doorc, 0.8, 2); }
@@ -1047,7 +1085,7 @@ const SR = (() => {
   }
   const doorTargets = [leaf];
   return { G, leaf, hinge, products, mini, toggle, update, doorTargets, isOpen: () => target === 1, bounds: { x0: RX0, x1: RX1, y0: RY0, y1: RY1 },
-    counters: counters.map((c) => ({ x0: c.x - 0.32, x1: c.x + 0.32, y0: -9.57, y1: -5.88, h: 0.93 })) };
+    counters: counters.map((c) => ({ x0: c.x - 0.32, x1: c.x + 0.32, y0: -8.97, y1: -5.88, h: 0.93 })) };
 })();
 // Espaço Memória no modo Assistir: clique na porta abre; clique num produto mostra a indicação
 if (!OPMODE) {
