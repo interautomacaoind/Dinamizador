@@ -37,21 +37,24 @@ Não implementado: oclusão por profundidade do Quest 3 (mãos reais escondendo 
 - **Segunda porta** na parede de entrada, à esquerda (vão 1,15 × 2,20 m, batente inox, visor de vidro, placa "ESPAÇO MEMÓRIA" dos dois lados). Clique/toque/dedo na porta: ela abre para dentro da sala nova; de novo, fecha. Funciona em Assistir, Operar, VR e AR.
 - Câmeras novas: **Porta do Espaço Memória** e **Espaço Memória (Grupo Real)**.
 - Piso de madeira, lambris verde com friso dourado, iluminação quente.
-- **Parede do fundo:** painel "GRUPO REAL · Real H · CMR Saúde · Homeopet" e quadro do fundador (ilustração, sem foto) + placa de fontes.
-- **Quadros (linha do tempo):**
-  - 1985 – loja de produtos veterinários em Ribas do Rio Pardo (MS)
-  - 1987 – nasce a Homeopatia Populacional (Prof. Dr. Claudio Martins Real)
-  - 1989 – fábrica de Sal Mineralizado Real
-  - 2009 – linha Homeopet (cães e gatos)
-  - 2019 – exportações (Bolívia, Guatemala; presença em Paraguai, México, Colômbia)
-  - 2023 – nasce a marca CMR Saúde (Expogrande 2023; CMR = Claudio Martins Real)
-  - Hoje – Grupo Real: sede em Campo Grande, fábrica em Cuiabá, +330 profissionais, +15 milhões de bovinos
-  - Lab. – maior laboratório de homeopatia veterinária da América Latina
-- **Vitrine CMR** (2 balcões, 8 produtos com cartão de indicação): CMR VET (pomada cicatrizante), Homeopet (pomada cães e gatos), Carrapat 100, Parasit 100, Sacsom, Sodo 100, Pró-Cio, Dermosan MD. Toque gira o produto e mostra a indicação; no Quest dá para pegar com o grip (ao soltar, volta ao lugar).
-- **Pedestal central:** miniatura 1:5 girando da dinamizadora CMR REV17.
-- Embalagens e retrato são **ilustrativos** (sem logotipos ou fotos oficiais). Antes de uso comercial, validar textos e nomes de produtos com o marketing do Grupo Real.
+- **Parede do fundo:** painel "GRUPO REAL · Real H · CMR Saúde · Homeopet", **retrato fotográfico do Prof. Dr. Claudio Martins Real** (foto oficial do site do Grupo Real, com spot de luz) e **placa de latão**: "1926 · Médico-veterinário · Fundador e Presidente do Grupo Real · Pioneiro e criador do termo Homeopatia Populacional · A marca CMR leva as suas iniciais".
+- **Quadros com fotos reais do acervo** (linha do tempo oficial de gruporealbr.com.br):
+  - Parede oeste: 1985 loja em Ribas do Rio Pardo · 1986 estudo da mortalidade de bovinos · 1989 Fábrica de Sal Mineralizado Real · 1991 nasce a Homeopatia Populacional
+  - Parede leste: 1996 a Real H vem para Campo Grande · 2009 linha Homeopet · 2019 exportações para Guatemala e Bolívia · 2023 lançamento da marca CMR em homenagem ao fundador
+  - (Correção: na versão anterior a Homeopatia Populacional aparecia em 1987; a linha do tempo oficial indica 1991.)
+- **Vitrine CMR Saúde com as embalagens reais** (fotos do catálogo cmrsaude.com.br), em escala real:
+  - Balcão oeste: CMR VET 190 g (pote 3D com o rótulo projetado), Figotonus Gel 250 mL, Matrimax Gel 250 mL, Dia 100 36 g
+  - Balcão leste: Entero 100, Finintox e Parasit 100 600 g (caixas 3D com frente e lateral da embalagem), Dermosan MD 4 kg
+  - Cantos do fundo, sobre estrado de madeira: Carrapat 100 e Sodo 100 (sacos de 20 kg)
+  - Frascos, sacos e a seringa usam a foto recortada (sem fundo) na frente e um volume atrás, para ter profundidade vista de lado; sombra de contato sob cada item; unidades extras de exposição ao lado.
+  - Cartão de cada produto com a indicação (resumo do catálogo). Toque gira o produto; no Quest dá para pegar com o grip.
+- **Pedestal central:** miniatura 1:5 girando da dinamizadora CMR REV17 e placa "Maior indústria de medicamentos homeopáticos veterinários da América Latina".
+- Imagens em `assets/memoria/` (originais + `fontes.json` com a origem de cada uma) e `assets/memoria/tex/` (texturas tratadas).
+- **Uso das imagens:** fotos e embalagens são do próprio Grupo Real / CMR. Como o site do GitHub Pages é público, confirme com o marketing do Grupo Real a autorização para publicar as fotos (em especial o retrato do fundador). Se preferir, o repositório pode ser tornado privado ou as imagens trocadas por versões oficiais em alta resolução enviadas pelo marketing.
 
 ### Fontes
+- Grupo Real – Prof. Dr. Claudio Martins Real: https://gruporealbr.com.br/claudio-martins-real-curriculo
+- CMR Saúde – Bovinos de corte (catálogo): https://www.cmrsaude.com.br/bovinos-de-corte
 - Grupo Real – Quem somos: https://gruporealbr.com.br/quem-somos
 - Grupo Real – Nova marca CMR: https://gruporealbr.com.br/noticias/nova-marca-cmr
 - CMR Saúde – Sobre nós: https://www.cmrsaude.com.br/sobre-nos
