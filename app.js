@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { XREstimatedLight } from 'three/addons/webxr/XREstimatedLight.js';
 
 const $ = (id) => document.getElementById(id);
 const R = await (await fetch('assets/roteiro.json')).json();
@@ -28,11 +29,12 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xdfe3e7);
 const pm = new THREE.PMREMGenerator(renderer);
-scene.environment = pm.fromScene(new RoomEnvironment(), 0.03).texture;
+const envPadrao = pm.fromScene(new RoomEnvironment(), 0.03).texture; scene.environment = envPadrao;
 scene.environmentIntensity = 0.75;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa2a8, 1.25));
+const hemi = new THREE.HemisphereLight(0xffffff, 0x9aa2a8, 1.25); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(1.5, 10, 2); scene.add(sun);
 const fill = new THREE.DirectionalLight(0xffffff, 0.35); fill.position.set(-3, 4, -6); scene.add(fill);
+const baseLights = [hemi, sun, fill];
 
 const rig = new THREE.Group(); scene.add(rig);
 const world = new THREE.Group(); scene.add(world);          // tudo da sala (move/escala no modo AR)
@@ -604,7 +606,7 @@ arui.innerHTML = `<div id="armsg">Procurando superfície… mova o celular devag
   <div id="arbtns"><button id="arRe">⟲ Reposicionar</button><button id="arL">↺</button><button id="arR">↻</button><button id="arPlay">❚❚</button><button id="arExit">Sair</button></div>`;
 document.body.appendChild(arui);
 $('arbtns').addEventListener('beforexrselect', (e) => e.preventDefault());       // toques nos botões não posicionam
-const arMsg = (s) => { const m = $('armsg'); if (m && m.textContent !== s) m.textContent = s; };
+const arMsg = (s) => { const m = $('armsg'); if (m && m.textContent !== s && !(typeof flashUntil !== 'undefined' && performance.now() < flashUntil)) m.textContent = s; };
 function uiState() {
   $('arbtns').style.display = XR.state === 'placed' ? 'flex' : 'none';
   $('arPlay').textContent = st.playing ? '❚❚' : '▶';
@@ -622,8 +624,9 @@ function arButton(label, scale) {
   b.onclick = async () => {
     if (renderer.xr.isPresenting) { renderer.xr.getSession().end(); return; }
     try {
+      const RO = arOpcoes();
       const ses = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'],
-        optionalFeatures: ['hit-test', 'anchors', 'plane-detection', 'dom-overlay', 'hand-tracking'], domOverlay: { root: arui } });
+        optionalFeatures: RO.opt, domOverlay: { root: arui }, ...RO.extra });
       XR.mode = 'ar'; XR.scale = scale;
       await renderer.xr.setSession(ses);
       try { const vs = await ses.requestReferenceSpace('viewer'); XR.hitSrc = await ses.requestHitTestSource({ space: vs }); } catch (e) { XR.hitSrc = null; }
@@ -770,6 +773,125 @@ renderer.xr.addEventListener('sessionend', () => {
   rays.forEach((c) => { c.visible = false; });
   rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0); setView(camMode === 'livre' ? 'geral' : camMode);
 });
+// ------------------------------------------------------------------ REALISMO NO AR
+// 1) luz estimada do ambiente real (Android/ARCore: direção, cor e reflexos do cômodo nos metais)
+// 2) sombras reais no piso (captador de sombra invisível) + oclusão ambiente sob as máquinas
+// 3) oclusão por profundidade no Quest 3 (mãos, pessoas e móveis reais escondem o virtual)
+// 4) presets de luz (Quest não estima luz), mapeamento de tons neutro (cores das embalagens fiéis) e qualidade
+const REAL = { luz: 'auto', alta: false, ocl: true, est: false, prev: null };
+const IS_QUEST = /OculusBrowser|Quest|Pacific/i.test(navigator.userAgent);
+try { const s = JSON.parse(localStorage.getItem('dinamizador_real') || '{}'); Object.assign(REAL, { luz: s.luz || 'auto', alta: !!s.alta, ocl: s.ocl !== false }); } catch (e) { }
+const saveReal = () => { try { localStorage.setItem('dinamizador_real', JSON.stringify({ luz: REAL.luz, alta: REAL.alta, ocl: REAL.ocl })); } catch (e) { } };
+const xrLight = new XREstimatedLight(renderer, true);
+function usaLuzReal() {
+  REAL.est = true; scene.add(xrLight); baseLights.forEach((l) => { l.visible = false; });
+  if (xrLight.environment) { scene.environment = xrLight.environment; scene.environmentIntensity = 1.0; }
+  renderer.toneMappingExposure = 1.0; if (typeof realBtn === 'function') realBtn();
+}
+xrLight.addEventListener('estimationstart', () => {
+  if (XR.mode !== 'ar') return;
+  REAL.estAvail = true; if (REAL.luz === 'auto') { usaLuzReal(); arMsgFlash('Luz do ambiente real detectada'); }
+});
+xrLight.addEventListener('estimationend', () => { REAL.est = false; REAL.estAvail = false; scene.remove(xrLight); });
+// presets (intensidades da hemisférica, do "sol", do preenchimento, reflexo e exposição)
+const LUZ = {
+  auto: { nome: 'Luz automática', hemi: [0xffffff, 0x9aa2a8, 1.1], sun: [0xffffff, 0.9], fill: 0.3, env: 0.8, exp: 1.0, dir: [0.35, 1, 0.25] },
+  led: { nome: 'Galpão LED (fria)', hemi: [0xf2f6ff, 0x8d949c, 1.15], sun: [0xf4f8ff, 1.0], fill: 0.3, env: 0.85, exp: 1.0, dir: [0.1, 1, 0.1] },
+  quente: { nome: 'Luz quente', hemi: [0xfff1dc, 0xa08a70, 1.0], sun: [0xffe2b8, 1.0], fill: 0.25, env: 0.7, exp: 1.0, dir: [0.6, 1, 0.3] },
+  janela: { nome: 'Luz de janela (lateral)', hemi: [0xeef4ff, 0x8a8f96, 0.8], sun: [0xffffff, 1.6], fill: 0.15, env: 0.7, exp: 1.05, dir: [1, 0.7, 0.2] },
+  fraca: { nome: 'Ambiente escuro', hemi: [0xdfe6f0, 0x6e747a, 0.6], sun: [0xffffff, 0.5], fill: 0.15, env: 0.5, exp: 0.85, dir: [0.2, 1, 0.2] },
+};
+const LUZ_ORD = Object.keys(LUZ);
+function aplicaLuz() {
+  const P = LUZ[REAL.luz] || LUZ.auto;
+  hemi.color.set(P.hemi[0]); hemi.groundColor.set(P.hemi[1]); hemi.intensity = P.hemi[2];
+  sun.color.set(P.sun[0]); sun.intensity = P.sun[1]; fill.intensity = P.fill;
+  scene.environment = envPadrao; scene.environmentIntensity = P.env; renderer.toneMappingExposure = P.exp;
+  baseLights.forEach((l) => { l.visible = true; }); if (REAL.est) { scene.remove(xrLight); REAL.est = false; }
+  if (REAL.luz === 'auto' && REAL.estAvail) usaLuzReal();
+}
+function restauraLuz() {
+  hemi.color.set(0xffffff); hemi.groundColor.set(0x9aa2a8); hemi.intensity = 1.25; sun.color.set(0xffffff); sun.intensity = 0.9; fill.intensity = 0.35;
+  scene.environment = envPadrao; scene.environmentIntensity = 0.75; renderer.toneMappingExposure = 1.0; baseLights.forEach((l) => { l.visible = true; });
+}
+// ---- sombras: luz só de sombra + captador invisível no piso (acompanha a sala/maquete)
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = true;
+const shL = new THREE.DirectionalLight(0xffffff, 0.0001); shL.castShadow = false;
+shL.shadow.mapSize.set(2048, 2048); shL.shadow.bias = -0.0004; shL.shadow.normalBias = 0.025; shL.shadow.radius = 3;
+scene.add(shL, shL.target);
+const catcher = new THREE.Mesh(new THREE.PlaneGeometry(12, 18), new THREE.ShadowMaterial({ opacity: 0.38, depthWrite: false }));
+catcher.rotation.x = -Math.PI / 2; catcher.position.set(0, 0.004, 2.5); catcher.receiveShadow = true; catcher.visible = false; catcher.renderOrder = -1; world.add(catcher);
+// oclusão ambiente de contato sob as máquinas (sombra difusa que "assenta" a máquina no piso)
+const aoTex = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 256; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 20, 128, 128, 126); gr.addColorStop(0, 'rgba(0,0,0,.62)'); gr.addColorStop(0.55, 'rgba(0,0,0,.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c); })();
+const aoBlobs = [];
+for (const mn of MN) { const m = machines[mn]; const bb = new THREE.Box3().setFromObject(m.root); const sz = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(sz.x * 1.35, sz.z * 1.35), new THREE.MeshBasicMaterial({ map: aoTex, transparent: true, depthWrite: false, toneMapped: false }));
+  b.rotation.x = -Math.PI / 2; world.worldToLocal(c); b.position.set(c.x, 0.005, c.z); b.visible = false; world.add(b); aoBlobs.push(b); }
+let castersSet = false;
+function setCasters(on) {
+  world.traverse((o) => { if (!o.isMesh || o === catcher || aoBlobs.includes(o)) return; if (shell.includes(o)) { o.castShadow = false; return; }
+    const m = [].concat(o.material)[0]; if (m && (m.transparent && m.opacity < 0.6 || m.isMeshBasicMaterial || m.isSpriteMaterial)) return; o.castShadow = on; });
+  castersSet = on;
+}
+const _sd = new THREE.Vector3(), _wc = new THREE.Vector3();
+function sombraFrame() {
+  if (!shL.castShadow) return;
+  const s = world.scale.x;
+  if (REAL.est && xrLight.directionalLight.intensity > 0.05) _sd.copy(xrLight.directionalLight.position).normalize();
+  else _sd.fromArray((LUZ[REAL.luz] || LUZ.auto).dir).normalize().applyQuaternion(world.quaternion);
+  if (_sd.y < 0.35) { _sd.y = 0.35; _sd.normalize(); }                     // sol muito baixo gera sombra longa demais
+  catcher.getWorldPosition(_wc);
+  shL.target.position.copy(_wc); shL.position.copy(_wc).addScaledVector(_sd, 15 * s);
+  const cam = shL.shadow.camera, e = 10.5 * s;
+  if (cam.right !== e) { cam.left = -e; cam.right = e; cam.top = e; cam.bottom = -e; cam.near = 0.5 * s; cam.far = 40 * s; cam.updateProjectionMatrix(); }
+  // sombra mais forte com luz dura (estimada forte / janela) e mais suave com luz difusa
+  const dura = REAL.est ? Math.min(xrLight.directionalLight.intensity / 2.5, 1) : REAL.luz === 'janela' ? 0.9 : 0.55;
+  catcher.material.opacity = 0.18 + 0.3 * dura;
+}
+// nitidez de texturas em ângulo (piso, rótulos, IHM)
+const maxAniso = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+scene.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap']) if (m[k] && m[k].anisotropy < maxAniso) { m[k].anisotropy = maxAniso; m[k].needsUpdate = true; } });
+// ---- início / fim do AR
+renderer.xr.addEventListener('sessionstart', () => {
+  if (XR.mode !== 'ar') return;
+  REAL.prevTone = renderer.toneMapping; renderer.toneMapping = THREE.NeutralToneMapping;        // cores fiéis ao lado da imagem da câmera
+  shL.castShadow = true; setCasters(true); catcher.visible = true; aoBlobs.forEach((b) => { b.visible = true; });
+  if (REAL.luz !== 'auto' || !REAL.est) aplicaLuz();
+  const ses = renderer.xr.getSession();
+  REAL.depth = !!(ses.enabledFeatures && ses.enabledFeatures.includes('depth-sensing'));
+  realBtn();
+});
+renderer.xr.addEventListener('sessionend', () => {
+  if (REAL.prevTone !== undefined) renderer.toneMapping = REAL.prevTone;
+  shL.castShadow = false; if (castersSet) setCasters(false); catcher.visible = false; aoBlobs.forEach((b) => { b.visible = false; });
+  REAL.est = false; REAL.estAvail = false; scene.remove(xrLight); restauraLuz();
+});
+// opções da sessão AR (chamadas pelo botão AR antes de requestSession)
+function arOpcoes() {
+  const opt = ['hit-test', 'anchors', 'plane-detection', 'dom-overlay', 'hand-tracking', 'light-estimation'];
+  const extra = {};
+  if (IS_QUEST && REAL.ocl) { opt.push('depth-sensing'); extra.depthSensing = { usagePreference: ['gpu-optimized'], dataFormatPreference: ['float32', 'luminance-alpha', 'unsigned-short'] }; }
+  renderer.xr.setFramebufferScaleFactor(REAL.alta ? (IS_QUEST ? 1.3 : 1.2) : 1.0);
+  renderer.xr.setFoveation(REAL.alta ? 0.5 : 1);
+  return { opt, extra };
+}
+// ---- interface: seletor antes de entrar e botão ☀ dentro do AR (celular)
+const selLuz = document.createElement('select'); selLuz.id = 'arluz'; selLuz.title = 'Luz e qualidade do AR';
+for (const k of LUZ_ORD) { const o = document.createElement('option'); o.value = k; o.textContent = '☀ ' + LUZ[k].nome; selLuz.appendChild(o); }
+[['q_alta', '✦ Qualidade alta (mais nítido)'], ['q_norm', '✦ Qualidade normal'], ['ocl_on', '◐ Oclusão real ligada (Quest 3)'], ['ocl_off', '◐ Oclusão real desligada']].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; selLuz.appendChild(o); });
+function realSel() { selLuz.value = REAL.luz; [...selLuz.options].forEach((o) => { if (o.value === 'q_alta') o.textContent = (REAL.alta ? '✔ ' : '') + '✦ Qualidade alta (mais nítido)'; if (o.value === 'q_norm') o.textContent = (!REAL.alta ? '✔ ' : '') + '✦ Qualidade normal';
+  if (o.value === 'ocl_on') o.textContent = (REAL.ocl ? '✔ ' : '') + '◐ Oclusão real ligada (Quest 3)'; if (o.value === 'ocl_off') o.textContent = (!REAL.ocl ? '✔ ' : '') + '◐ Oclusão real desligada'; }); }
+selLuz.onchange = () => { const v = selLuz.value; if (v === 'q_alta') REAL.alta = true; else if (v === 'q_norm') REAL.alta = false; else if (v === 'ocl_on') REAL.ocl = true; else if (v === 'ocl_off') REAL.ocl = false; else { REAL.luz = v; if (renderer.xr.isPresenting && XR.mode === 'ar') aplicaLuz(); }
+  saveReal(); realSel(); };
+$('vrslot').appendChild(selLuz); realSel();
+const bLuz = document.createElement('button'); bLuz.id = 'arLuz'; $('arbtns').prepend(bLuz);
+function realBtn() { bLuz.textContent = '☀ ' + (REAL.luz === 'auto' ? (REAL.est ? 'Auto (real)' : 'Auto') : LUZ[REAL.luz].nome.split(' ')[0]); }
+bLuz.onclick = () => { REAL.luz = LUZ_ORD[(LUZ_ORD.indexOf(REAL.luz) + 1) % LUZ_ORD.length]; aplicaLuz(); saveReal(); realSel(); realBtn(); arMsgFlash(LUZ[REAL.luz].nome + (REAL.luz === 'auto' ? ' · usa a luz real quando o aparelho estima' : '')); };
+let flashUntil = 0; function arMsgFlash(s) { const m = $('armsg'); if (m) { m.textContent = s; flashUntil = performance.now() + 2500; } }
+window.__real = { REAL, aplicaLuz, sombraFrame, catcher, shL, setCasters, aoBlobs, shell, renderer };
+
 let snapCool = 0, btnPrev = {};
 function xrInput(dt) {
   const s = renderer.xr.getSession(); if (!s) return;
@@ -1980,7 +2102,7 @@ renderer.setAnimationLoop((now, frame) => {
   update(st.t, dt, st.playing);
   if (st.playing) triggerEvents(t0, st.t);
   updateAudio(st.t, t0, st.playing);
-  if (renderer.xr.isPresenting) { xrInput(dt); arFrame(frame, dt); if (OP) OP.frame(frame); }
+  if (renderer.xr.isPresenting) { xrInput(dt); arFrame(frame, dt); sombraFrame(); if (OP) OP.frame(frame); }
   else {
     if (camMode === 'operadora') followCam('OPERADORA', dt);
     else if (camMode === 'supervisor') followCam('SUPERVISOR', dt);
