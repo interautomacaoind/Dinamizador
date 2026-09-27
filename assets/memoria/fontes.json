@@ -1,0 +1,116 @@
+{
+ "tl": [
+  {
+   "k": 0,
+   "ano": "1985",
+   "txt": "Abertura da loja de produtos veterinários em Ribas do Rio Pardo, MS.",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54294215192_16afbbb5ca_z.jpg"
+  },
+  {
+   "k": 1,
+   "ano": "1986",
+   "txt": "Estudo da mortalidade de bovinos em Mato Grosso do Sul",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54295096996_00aee15a3a_n.jpg"
+  },
+  {
+   "k": 2,
+   "ano": "1989",
+   "txt": "Inauguração da Fábrica de Sal Real em Ribas do Rio Pardo, MS.",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54295526910_1f64778462_n.jpg"
+  },
+  {
+   "k": 3,
+   "ano": "1991",
+   "txt": "Experimento comprova a eficácia dos medicamentos homeopáticos utilizados em rebanhos. Nasce a Homeopatia Populacional",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54294215382_4c26e5b6d8_z.jpg"
+  },
+  {
+   "k": 4,
+   "ano": "1996",
+   "txt": "Vinda da Real H para Campo Grande - MS",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54295527095_2ace39f973_n.jpg"
+  },
+  {
+   "k": 12,
+   "ano": "2009",
+   "txt": "Lançamento da linha Homeo Pet",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54295097086_75254b0382_n.jpg"
+  },
+  {
+   "k": 17,
+   "ano": "2019",
+   "txt": "Início das exportações para Guatemala e Bolívia",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54295334244_0904370627_n.jpg"
+  },
+  {
+   "k": 21,
+   "ano": "2023",
+   "txt": "Grupo Real H lança marca CMR em homenagem ao Prof. Dr. Claudio Martins Real",
+   "src": "https://conteudo.realh.com.br/wp-content/uploads/2026/08/54295526900_a89d69b67f_z.jpg"
+  }
+ ],
+ "prods": [
+  {
+   "key": "prod_cmr-vet_190g.jpg",
+   "nome": "CMR VET - CMR - Linha Farma - Unidade de 190g",
+   "desc": "COMPOSIÇÃO: Castor equi 7 CH; Calendula officinalis 7 CH; Equinacea angustifolia 7 CH e Veículo qsp 100ml.",
+   "url": "https://www.cmrsaude.com.br/produto/cmr-vet-cmr-linha-farma-unidade-de-190g-150234"
+  },
+  {
+   "key": "prod_figotonus-gel_250ml.jpg",
+   "nome": "Figotonus Gel - CMR - Linha Farma - Unidade 250ml",
+   "desc": "Iodum 5 CH; Phosphorus 7 CH; Cardus marianus 6 CH; Chelidonium majus 6 CH; Berberis vulgaris 6 CH; Sulphur 9 CH; Leptandra virginica 6 CH; Chionantus virginica 15 CH; Carboneum tetrachloricum 15 CH; Myrica cerifera 7 CH e Veículo qsp 100g.",
+   "url": "https://www.cmrsaude.com.br/produto/figotonus-gel-cmr-linha-farma-unidade-250ml-150239"
+  },
+  {
+   "key": "prod_matrimax-gel_250ml.jpg",
+   "nome": "Matrimax Gel - CMR - Linha Farma - Unidade 250ml",
+   "desc": "INDICAÇÃO: Indicado para favorecer a expulsão da placenta e a involução uterina de vacas, búfalas, ovelhas e cabras.",
+   "url": "https://www.cmrsaude.com.br/produto/matrimax-gel-cmr-linha-farma-unidade-250ml-150242"
+  },
+  {
+   "key": "prod_dia-100_36g.jpg",
+   "nome": "Dia 100 - CMR - Linha Farma - Unidade 36g",
+   "desc": "INDICAÇÃO: Indicado como preventivo e curativo de diarreias em bovinos, ovinos, caprinos, equídeos e suínos.",
+   "url": "https://www.cmrsaude.com.br/produto/dia-100-cmr-linha-farma-unidade-36g-150236"
+  },
+  {
+   "key": "prod_finintox_600g.jpg",
+   "nome": "Finintox - CMR - Linha Carbo - Unidade 600g",
+   "desc": "INDICAÇÃO: Indicado na prevenção e tratamento das intoxicações em geral, especialmente àquelas decorrentes da ingestão de plantas tóxicas, para ruminantes e equinos",
+   "url": "https://www.cmrsaude.com.br/produto/finintox-cmr-linha-carbo-unidade-600g-150249"
+  },
+  {
+   "key": "prod_parasit-100_600g.jpg",
+   "nome": "Parasit 100 - CMR - Linha Carbo - Unidade 600g",
+   "desc": "INDICAÇÃO: Indicado como auxiliar no controle de ecto e endoparasitas de bovinos.",
+   "url": "https://www.cmrsaude.com.br/produto/parasit-100-cmr-linha-carbo-unidade-600g-150244"
+  },
+  {
+   "key": "prod_entero-100_600g.jpg",
+   "nome": "Entero 100 - CMR - Linha Carbo - Unidade 600g",
+   "desc": "INDICAÇÃO: Indicado para o tratamento preventivo e curativo das Enterites de qualquer origem em bovinos, ovinos, caprinos, suínos e equídeos.",
+   "url": "https://www.cmrsaude.com.br/produto/entero-100-cmr-linha-carbo-unidade-600g-150237"
+  },
+  {
+   "key": "prod_dermosan-md_4kg.jpg",
+   "nome": "Dermosan MD - CMR - Linha MD - 4kg",
+   "desc": "Com fórmula exclusiva e ação comprovada, o Dermosan MD combate a papilomatose resistente e promove a recuperação da pele de forma segura. Compre aqui!",
+   "url": "https://www.cmrsaude.com.br/produto/dermosan-md-cmr-linha-md-4kg-150192"
+  },
+  {
+   "key": "prod_carrapat-100_20kg.jpg",
+   "nome": "Carrapat 100 - CMR - Linha Carbo - 20kg",
+   "desc": "Mantenha os animais livres de parasitas com Carrapat 100 CMR. 20kg de fórmula para proteção e saúde duradoura. Não deixe para depois, compre já!",
+   "url": "https://www.cmrsaude.com.br/produto/carrapat-100-cmr-linha-carbo-20kg-150196"
+  },
+  {
+   "key": "prod_sodo-100_20kg.jpg",
+   "nome": "Sodo 100 - CMR - Linha Carbo - 20kg",
+   "desc": "Melhore a nutrição animal com o Sodo 100 CMR. 20kg de fórmula para fortalecer e garantir o bem-estar dos animais. Ideal para todas as fases.",
+   "url": "https://www.cmrsaude.com.br/produto/sodo-100-cmr-linha-carbo-20kg-150194"
+  }
+ ],
+ "fundador": "https://gruporealbr.com.br/claudio-martins-real-curriculo",
+ "coletado": "2026-09-26"
+}
