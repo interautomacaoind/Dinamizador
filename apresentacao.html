@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Apresentação · Dinamizadoras CMR REV20</title>
+<style>
+  :root { --pn:rgba(18,24,32,.88); --tx:#e8eef3; --mu:#9fb0bf; --ac:#2fbf71; }
+  html,body { margin:0; height:100%; background:#1b2229; color:var(--tx); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  canvas { display:block; }
+  #load { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:#0f1419; z-index:40; text-align:center; padding:16px; }
+  #load .bar { width:min(420px,80vw); height:8px; background:#24303b; border-radius:6px; overflow:hidden; }
+  #load .bar i { display:block; height:100%; width:0; background:var(--ac); transition:width .2s; }
+  #start { display:none; padding:12px 26px; font-size:17px; border:0; border-radius:10px; background:var(--ac); color:#fff; cursor:pointer; }
+  #top { position:fixed; left:12px; top:10px; right:12px; display:flex; gap:10px; align-items:flex-start; pointer-events:none; z-index:5; }
+  #top .t { background:var(--pn); padding:8px 12px; border-radius:10px; pointer-events:auto; }
+  #top h1 { font-size:15px; margin:0 0 2px; font-weight:650; } #top small { color:var(--mu); }
+  #menu { margin-left:auto; pointer-events:auto; background:var(--pn); color:var(--tx); border:1px solid #3a4854; border-radius:10px; padding:8px 12px; font-size:14px; cursor:pointer; }
+  #lista { position:fixed; right:12px; top:58px; margin:0; padding:8px; list-style:none; background:var(--pn); border-radius:12px; z-index:6; max-height:calc(100vh - 260px); overflow:auto; display:none; width:min(360px, 80vw); }
+  #lista.open { display:block; }
+  #lista li { padding:6px 10px; border-radius:8px; cursor:pointer; color:var(--mu); } #lista li:hover { background:#26323d; } #lista li.on { background:#1f4d36; color:#fff; }
+  #painel { position:fixed; left:12px; right:12px; bottom:12px; background:var(--pn); border-radius:14px; padding:12px 14px 10px; z-index:5; max-width:980px; }
+  #painel .h { display:flex; gap:10px; align-items:baseline; } #pnum { color:var(--ac); font-weight:700; font-variant-numeric:tabular-nums; }
+  #ptit { font-size:17px; font-weight:650; } #ptxt { color:#cfe0ee; margin:6px 0 8px; font-size:14.5px; }
+  #pb { height:3px; background:#24303b; border-radius:3px; overflow:hidden; margin-bottom:8px; } #pbar { height:100%; width:0; background:var(--ac); }
+  .btns { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .btns button, .btns select { background:#26323d; color:var(--tx); border:1px solid #3a4854; border-radius:8px; padding:7px 12px; font-size:14px; cursor:pointer; }
+  .btns button.on { background:var(--ac); border-color:var(--ac); }
+  #next { background:var(--ac) !important; border-color:var(--ac) !important; font-weight:650; }
+  #vrslot { display:flex; gap:6px; flex-wrap:wrap; } #vrslot button { position:static !important; transform:none !important; left:auto !important; bottom:auto !important; }
+  #tabela { display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-62%); background:rgba(12,19,27,.94); border-radius:16px; padding:18px 22px; z-index:7; max-width:94vw; overflow:auto; }
+  #tabela table { border-collapse:collapse; font-size:14.5px; } #tabela th, #tabela td { padding:7px 12px; border-bottom:1px solid #2c3a46; text-align:left; white-space:nowrap; }
+  #tabela th { color:var(--mu); font-weight:600; } #tabela td.n { color:var(--ac); font-weight:700; } #tabela small { color:var(--mu); display:block; margin-top:10px; white-space:normal; max-width:760px; }
+  #arui { display:none; position:fixed; inset:0; pointer-events:none; z-index:30; font:15px/1.35 system-ui,sans-serif; }
+  #armsg { position:absolute; left:50%; top:max(14px, env(safe-area-inset-top)); transform:translateX(-50%); max-width:88vw; text-align:center; background:rgba(18,24,32,.78); color:#fff; padding:9px 14px; border-radius:12px; }
+  #arcap { display:none; position:absolute; left:12px; right:12px; bottom:calc(max(18px, env(safe-area-inset-bottom)) + 58px); background:rgba(18,24,32,.82); color:#e8eef3; padding:10px 14px; border-radius:12px; font-size:14px; max-height:30vh; overflow:auto; }
+  #arcap b { color:#7ff0ad; }
+  #arbtns { position:absolute; left:0; right:0; bottom:max(18px, env(safe-area-inset-bottom)); display:none; justify-content:center; gap:8px; flex-wrap:wrap; pointer-events:auto; }
+  #arbtns button { background:rgba(18,24,32,.82); color:#fff; border:1px solid rgba(255,255,255,.35); border-radius:22px; padding:10px 14px; font-size:15px; min-width:44px; }
+  #arbtns #arNext { background:rgba(47,191,113,.9); border-color:#2fbf71; }
+  @media (max-width:700px) { #ptxt { font-size:13px; } #top small { display:none; } #painel { padding:10px; } }
+</style>
+<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/addons/":"./lib/addons/"}}</script>
+</head>
+<body>
+<div id="load">
+  <div style="font-size:19px;font-weight:650">Apresentação · Dinamizadoras CMR REV20</div>
+  <div style="color:#9fb0bf">4 × 10 L e 3 × 10 L (borosilicato 3.3, GL80) · sala com 4 máquinas · realidade aumentada</div>
+  <div class="bar"><i id="pg"></i></div>
+  <div id="lt" style="color:#9fb0bf">carregando modelos…</div>
+  <button id="start">▶ Iniciar apresentação</button>
+</div>
+<div id="top">
+  <div class="t"><h1>Sala de Dinamização · REV20 (10 L) + REV17</h1><small>Arraste para girar · roda/pinça aproxima · ← → passa os passos</small></div>
+  <button id="menu">☰ Passos</button>
+</div>
+<ol id="lista"></ol>
+<div id="tabela">
+  <table>
+    <tr><th>Máquina</th><th>Garrafões</th><th>Volume/garrafão</th><th>Por ciclo</th><th>Ativo/ciclo</th><th>Acesso</th><th>Ciclo est.</th><th>8 h (est.)</th></tr>
+    <tr><td><b>M1 · REV20 4G</b></td><td>4 × 10 L</td><td>7 L (70 %)</td><td class="n">28 L</td><td>4 × 60 = 240 mL</td><td>frente + trás</td><td>≈ 9:10</td><td class="n">≈ 1.450 L</td></tr>
+    <tr><td><b>M2 · REV20 3G</b></td><td>3 × 10 L</td><td>7 L (70 %)</td><td class="n">21 L</td><td>3 × 60 = 180 mL</td><td>só frente</td><td>≈ 9:00</td><td class="n">≈ 1.110 L</td></tr>
+    <tr><td><b>M3 · REV17</b></td><td>6 × 5 L</td><td>3,6 L</td><td class="n">21,6 L</td><td>6 × 30 = 180 mL</td><td>frente + trás</td><td>≈ 8:02</td><td class="n">≈ 1.270 L</td></tr>
+    <tr><td><b>M4 · REV17</b></td><td>6 × 5 L</td><td>3,6 L</td><td class="n">21,6 L</td><td>6 × 30 = 180 mL</td><td>frente + trás</td><td>≈ 8:02</td><td class="n">≈ 1.270 L</td></tr>
+    <tr><td><b>Sala</b></td><td>19 garrafões</td><td></td><td class="n">92,2 L</td><td>780 mL</td><td></td><td></td><td class="n">≈ 5.100 L</td></tr>
+  </table>
+  <small>Ciclo REV20: fixar 0:05 · dosar 7 L a ~4 L/min 1:45 · pipetar 4 × 60 mL ≈ 1:05 · mistura 5:00 · estabilizar 0:05 · drenar ≈ 1:00 · liberar 0:10. Produção em 8 h sem paradas, a confirmar no protótipo (dosagem, sucussão de 110 kg em movimento e tempo de pipetagem).</small>
+</div>
+<div id="painel">
+  <div class="h"><span id="pnum">1/14</span><span id="ptit"></span></div>
+  <div id="ptxt"></div>
+  <div id="pb"><div id="pbar"></div></div>
+  <div class="btns">
+    <button id="prev">◀</button><button id="next">Próximo ▶</button><button id="auto">▶ Auto</button><button id="xray">Raio-X</button>
+    <select id="artgt" title="O que aparece no AR"><option value="sala">AR: sala inteira</option><option value="M1">AR: só M1 (4 × 10 L)</option><option value="M2">AR: só M2 (3 × 10 L)</option><option value="M3">AR: só M3 (REV17)</option></select>
+    <span id="vrslot"></span>
+  </div>
+</div>
+<script type="module" src="./apres.js?v=1"></script>
+</body>
+</html>
