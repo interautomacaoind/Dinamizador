@@ -350,7 +350,7 @@ def build_room():
         for m in MACH:
             if (m[1] > 0) != (sx > 0): continue
             sxy = MP[m[0]]['stubs']['BASE']
-            tube(f'Descida base {m[0]}', [(sxy[0], sxy[1], ZM_), (sxy[0], sxy[1], 2.815)], 0.0127, INOXP, G)
+            tube(f'Descida base {m[0]}', [(sxy[0], sxy[1], ZM_), (sxy[0], sxy[1], 2.36)], 0.0127, INOXP, G)
             cyl(f'Valvula base {m[0]}', 0.025, 3.05, 3.12, (sxy[0], sxy[1]), 'Z', INOXP, G, seg=16)
             cbox(f'Valvula base atuador {m[0]}', sxy[0] - 0.03, sxy[0] + 0.03, sxy[1] - 0.03, sxy[1] + 0.03, 3.12, 3.20, AZUL, G, 0.005)
         for yy in np.arange(-3.0, RY - 0.5, 2.0):
@@ -367,11 +367,11 @@ def build_room():
     for sx in (-1, 1):
         ms = [m for m in MACH if (m[1] > 0) == (sx > 0)]
         ys = [MP[m[0]]['stubs']['PRODUTO'][1] for m in ms]
-        xh = sx * 3.72
+        xh = sx * 3.68
         tube(f'Produto - coletor {sx}', [(xh, min(ys) - 0.02, ZP_), (xh, max(ys) + 0.02, ZP_)], 0.0165, INOXP, G)
         for m in ms:
             sxy = MP[m[0]]['stubs']['PRODUTO']
-            tube(f'Subida produto {m[0]}', [(sxy[0], sxy[1], 2.815), (sxy[0], sxy[1], ZP_)], 0.0127, INOXP, G)
+            tube(f'Subida produto {m[0]}', [(sxy[0], sxy[1], 2.36), (sxy[0], sxy[1], ZP_)], 0.0127, INOXP, G)
             cyl(f'Faixa verde subida {m[0]}', 0.0137, 2.95, 3.05, (sxy[0], sxy[1]), 'Z', VERDE, G, seg=12)
         tube(f'Produto -> TQ-01 {sx}', [(xh, 0.0, ZP_), (sx * 0.24, 0.0, ZP_), (sx * 0.24, 0.0, 1.60)], 0.0165, INOXP, G, bend=0.2)
         for xx in np.arange(0.8, 3.3, 1.2):
@@ -385,7 +385,7 @@ def build_room():
         for yy in np.arange(-3.5, RY - 0.6, 2.0):
             tirante(sx * 3.52, yy, ZM_)
         for yy in (-3.0, 1.0):
-            tirante(sx * 3.72, yy, ZP_)
+            tirante(sx * 3.68, yy, ZP_)
         for xx in (1.2, 2.6):
             tirante(sx * xx, 0.0, ZP_)
     for yy in np.arange(-0.5, RY - 0.5, 2.0):
@@ -426,7 +426,7 @@ def build_room():
         return o
     for m in MACH:
         c = to_world(m, ((MB[0] + MB[1]) / 2, 0))
-        blob(m[0], c[0], c[1], 2.3, 1.7, m[3])
+        blob(m[0], c[0], c[1], 2.2, 1.2, m[3])
     for k, t in enumerate(TABLES):
         blob(f'mesa {k}', t['x'], t['y'], t['w'] + 0.5, t['d'] + 0.5)
     for b in (BENCH_FRASCOS, BENCH_TORNEIRAS):

@@ -7,19 +7,21 @@ V_OP, V_SUP = 1.25, 1.10
 ACC = 0.45                              # s de aceleração/frenagem
 
 # ------------------------------------------------ ciclo da máquina (mapeamento tempo real -> tempo do clipe)
-# REV17 — ciclo-alvo de 8 min (tempos SIMULADOS entre parênteses; real = simulado / K_SIM)
-#   fechar cabeçotes 0:08 · dosar 21,6 L em paralelo (6 válvulas, ~32 L/min) 0:40 · PIPETAGEM MANUAL (operadora, sensores P1–P6 + CONFIRMAR)
-#   mistura 5:00 (fixa) · estabilizar 0:05 · drenar p/ TQ-01 0:35 · abrir cabeçotes 0:08
+# REV21 — dinamizadora REV20 3G (3 garrafões de 10 L, 7 L cada) — tempos SIMULADOS entre parênteses; real = simulado / K_SIM
+#   fixar garrafões (cilindros) 0:05 · dosar 7 L por garrafão em paralelo (~4 L/min) 1:45 · PIPETAGEM MANUAL 3 × 60 mL
+#   (sensores de garfo G1–G3 + CONFIRMAR) · mistura 5:00 · estabilizar 0:05 · drenar 21 L p/ TQ-01 0:45 · alívio 0:04
+#   ao fim do 2º ciclo: liberar (garras sobem, uniões soltas) 0:10
 S = lambda sim: sim / K_SIM
-C_FECHA = (2.0, 6.0, S(8))              # clipe 2->6
-C_DOSA = (6.0, 15.5, S(40))             # dosagem da solução hidroalcoólica 20 %
-C_PASSA = (15.5, 23.0, 0.3)             # trecho do clipe do antigo ativo por linha: passa direto
-MIX_REAL = S(300)                       # 5 min simulados
-N_LOOP = 12
-C_PAUSA = (35.0, 37.0, S(5))
-C_DRENO = (37.0, 47.0, S(35))
-C_ABRE = (47.0, 51.5, S(8))
-VOL_CICLO = 6 * 3.6                     # L por ciclo por máquina
+C_FECHA = (0.0, 0.0, S(5))
+C_DOSA = (0.0, 0.0, S(105))
+C_PASSA = (0.0, 0.0, 0.3)
+MIX_REAL = S(300)
+C_PAUSA = (0.0, 0.0, S(5))
+C_DRENO = (0.0, 0.0, S(45))
+C_ALIVIO = S(4)
+C_ABRE = (0.0, 0.0, S(10))
+N_BOT = 3
+VOL_CICLO = N_BOT * 7.0                 # L por ciclo por máquina
 
 
 class Machine:
@@ -31,39 +33,26 @@ class Machine:
         c['fecha'] = (t + 0.3, t + 0.3 + C_FECHA[2])
         c['dosa'] = (c['fecha'][1], c['fecha'][1] + C_DOSA[2])
         c['ready'] = c['dosa'][1]
-        c['pip'] = {}                   # P1..P6 -> instante em que o sensor registrou a ponteira
-        c['tampas'] = {}                # P1..P6 -> (abre, fecha)
+        c['pip'] = {}                   # P1..P3 -> instante em que o sensor registrou a ponteira
+        c['tampas'] = {}                # P1..P3 -> (abre, fecha)
         c['portas'] = []                # (lado 'F'/'T', abre, fecha)
         self.cycles.append(c)
         return c
 
-    def run(self, t):
+    def run(self, t, final=False):
         c = self.cycles[-1]
-        c['run'] = t                    # CONFIRMAR na IHM (validação dos 6 registros)
+        c['run'] = t                    # CONFIRMAR na IHM (validação dos 3 registros)
         m0 = t + C_PASSA[2]
         c['mix'] = (m0, m0 + MIX_REAL)
         c['pausa'] = (c['mix'][1], c['mix'][1] + C_PAUSA[2])
         c['dreno'] = (c['pausa'][1], c['pausa'][1] + C_DRENO[2])
-        c['abre'] = (c['dreno'][1], c['dreno'][1] + C_ABRE[2])
+        c['abre'] = (c['dreno'][1], c['dreno'][1] + (C_ABRE[2] if final else C_ALIVIO))
+        c['final'] = final
         c['end'] = c['abre'][1]
         return c
 
     def segments(self):
-        """lista (t0, t1, c0, c1, loop) — tempo real -> tempo do clipe"""
-        S_ = []
-        for c in self.cycles:
-            f0, f1 = c['fecha']; S_.append((f0, f1, C_FECHA[0], C_FECHA[1], 0))
-            d0, d1 = c['dosa']; S_.append((d0, d1, C_DOSA[0], C_DOSA[1], 0))
-            if 'run' not in c: continue
-            S_.append((c['run'], c['run'] + C_PASSA[2], C_PASSA[0], C_PASSA[1], 0))
-            m0, m1 = c['mix']
-            S_.append((m0, m0 + 2.0, 23.0, 25.0, 0))
-            S_.append((m0 + 2.0, m1 - 2.0, 25.0, 25.0 + 8.0 * N_LOOP, 8.0))     # laço de 8 s de clipe
-            S_.append((m1 - 2.0, m1, 33.0, 35.0, 0))
-            p0, p1 = c['pausa']; S_.append((p0, p1, 35.0, 37.0, 0))
-            r0, r1 = c['dreno']; S_.append((r0, r1, 37.0, 47.0, 0))
-            b0, b1 = c['abre']; S_.append((b0, b1, 47.0, 51.5, 0))
-        return S_
+        return []                       # REV21: máquina procedural (maq10.js) dirigida pelas fases do ciclo
 
 
 # ------------------------------------------------ personagens
@@ -110,8 +99,8 @@ def fwd_of(face): return (math.cos(face), math.sin(face))
 
 
 CARRY_L = ('body', 0.26, 0.19, 1.02)        # frasco âmbar 1 L na mão esquerda (segura pelo gargalo)
-CARRY_R = ('body', 0.22, -0.16, 1.10)       # pipetador + pipeta sorológica 50 mL na direita
-PIP_LEN = 0.42                              # mão -> ponta da pipeta
+CARRY_R = ('body', 0.22, -0.16, 1.10)       # pipetador + pipeta sorológica 100 mL na direita
+PIP_LEN = 0.47                              # mão -> ponta da pipeta
 PIP_TILT = math.radians(22)                 # pipeta inclinada p/ frente (ponta afastada da operadora)
 FLASK_TOP = 0.06                            # topo do frasco acima da mão esquerda
 
@@ -204,11 +193,11 @@ def build():
         op.carry = False
 
     # ---- pipetagem de um lado (3 garrafões) com as portas daquele lado abertas
-    DT_BOT = 2.3                        # s reais por garrafão (≈ 7 s simulados: abre tampa, aspira 30 mL, dispensa, fecha)
+    DT_BOT = 3.0                        # s reais por garrafão (≈ 9 s simulados: abre tampa do bocal, aspira 60 mL, dispensa, fecha)
     def side(mn, lado):
         mp = MP[mn]; c = M[mn].cycles[-1]
         m = [x for x in MACH if x[0] == mn][0]
-        idx = (0, 1, 2) if lado == 'F' else (3, 4, 5)
+        idx = (0, 1, 2)
         sgn = -1 if lado == 'F' else 1
         face = mp['face_f'] if lado == 'F' else mp['face_b']
         f = fwd_of(face); l = (-f[1], f[0])
@@ -223,11 +212,17 @@ def build():
             op.hand('L', w0, op.t, list(CARRY_L)); op.hand('R', w0, op.t, list(CARRY_R))
         # abre as duas folhas (mão direita na maçaneta)
         t = op.t
-        dm = to_world(m, (0.05, sgn * (DOOR_PLANE + 0.03), 1.10))
+        dm = to_world(m, (0.07, sgn * (DOOR_PLANE + 0.05), 1.20))
         op.stand(1.0, face=face, look=(dm[0], dm[1], 1.3))
         op.hand('R', t + 0.1, t + 0.7, ['world', *dm]); op.hand('R', t + 0.7, t + 1.0, list(CARRY_R)); op.hand('L', t, t + 1.0, list(CARRY_L))
         t_open = t + 0.45
         ev.append(dict(t=t_open, type='porta_maq_abre', m=mn, lado=lado))
+        # confere o nível de 7 L na graduação dos 3 garrafões antes de pipetar
+        t = op.t
+        lk = to_world(m, (0.0, -0.08, 0.92))
+        op.stand(1.2, face=face, look=lk)
+        op.hand('R', t, t + 1.2, list(CARRY_R)); op.hand('L', t, t + 1.2, list(CARRY_L))
+        ev.append(dict(t=t + 0.8, type='nivel_ok', m=mn))
         first = True
         for k, st in zip(idx, stands):
             if not first or math.dist(op.pos, st) > 0.05:
@@ -254,18 +249,17 @@ def build():
             ev.append(dict(t=t + 1.35, type='pipeta', m=mn, p=k + 1))
         # fecha as portas
         t = op.t
-        dm = to_world(m, (-0.05 if idx[0] < idx[-1] else 0.05, sgn * (DOOR_PLANE + 0.03), 1.10))
+        dm = to_world(m, (-0.07 if idx[0] < idx[-1] else 0.07, sgn * (DOOR_PLANE + 0.05), 1.20))
         op.stand(0.9, face=face, look=(dm[0], dm[1], 1.3))
         op.hand('R', t + 0.05, t + 0.6, ['world', *dm]); op.hand('R', t + 0.6, t + 0.9, list(CARRY_R)); op.hand('L', t, t + 0.9, list(CARRY_L))
         t_close = t + 0.55
         c['portas'].append((lado, t_open, t_close))
         ev.append(dict(t=t_close, type='porta_maq_fecha', m=mn, lado=lado))
 
-    def serve(mn):
-        side(mn, 'T')                   # traseira primeiro (chega de fora do corredor)
-        side(mn, 'F')                   # frente
-        tb = ihm_touch(mn, 'confirmar', 2.2)   # CONFIRMAR: o CLP confere os 6 registros dos sensores
-        M[mn].run(tb + 0.25)
+    def serve(mn, final=False):
+        side(mn, 'F')                   # REV21: 3 garrafões, todos pela frente
+        tb = ihm_touch(mn, 'confirmar', 2.2)   # CONFIRMAR: o CLP confere os 3 registros dos sensores de garfo
+        M[mn].run(tb + 0.25, final)
 
     # ---- 1ª rodada
     pick_bench(flask_track, FLASK_REST)
@@ -276,7 +270,7 @@ def build():
         M[mn].start(M[mn].cycles[0]['end'] + S(6), auto=True)
     swap_flask()
     for mn in ORDER:
-        serve(mn)
+        serve(mn, final=True)
     put_bench()
 
     # ---- ronda de inspeção até o fim do 2º ciclo

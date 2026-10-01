@@ -22,9 +22,13 @@ human.textures()
 MHD = human.MHD; TEX = human.TEX
 opA, _, V3a = human.build_human('OPERADORA', human.FEMALE, MHD + 'skins/young_caucasian_female/textures/young_lightskinned_female_diffuse.png',
                                 TEX + 'jaleco.png', (0.06, 0.13, 0.30), TEX + 'sapato_branco.png', (0.55, 0.70, 0.86), eye='brownlight')
+human.add_uniform('OPERADORA', 'female_casualsuit01', (0.62, 0.80, 0.95), (0.07, 0.12, 0.30), glove_rgb=(0.22, 0.38, 0.85),
+                  hair='ponytail01', hair_rgb=(0.12, 0.07, 0.04), badge=human.badge_tex(TEX + 'cracha_op.png', 'Ana', 'Operadora'))
 human.add_cap(opA, V3a, 'OPERADORA')
 spA, _, V3b = human.build_human('SUPERVISOR', human.MALE, MHD + 'skins/middleage_caucasian_male/textures/middleage_lightskinned_male_diffuse.png',
                                 TEX + 'jaleco.png', (0.05, 0.055, 0.06), TEX + 'sapato_preto.png', (0.30, 0.40, 0.55), eye='brown', eyebrow='eyebrow002')
+human.add_uniform('SUPERVISOR', 'male_casualsuit01', (0.80, 0.88, 0.97), (0.20, 0.22, 0.26), glove_rgb=None,
+                  hair='short02', hair_rgb=(0.20, 0.17, 0.14), badge=human.badge_tex(TEX + 'cracha_sup.png', 'Carlos', 'Supervisor'), sex='M', teeth=False)
 human.add_cap(spA, V3b, 'SUPERVISOR', rgb=(0.35, 0.55, 0.85))
 # REV17: sorriso da operadora (unidades de expressão MakeHuman) para a pausa do café
 SMILE = human.add_expression('OPERADORA', 'SORRISO', {'mouth-corner-puller': 1.0, 'mouth-upward-retraction': 0.35, 'mouth-part-later': 0.25,
@@ -49,17 +53,18 @@ def flask_prop(name):
     return F
 FRASCO = flask_prop('FRASCO_OPERADORA')
 FRASCO2 = flask_prop('FRASCO_OPERADORA_2')
-# pipetador elétrico (mão) + pipeta sorológica 50 mL; ponta a 0,42 m da mão (eixo -Z do objeto)
+# pipetador elétrico (mão) + pipeta sorológica 100 mL (dispensa 60 mL por garrafão); ponta a 0,47 m da mão (eixo -Z do objeto)
 PIPETA = empty('PIPETA_OPERADORA', (0, 0, 0), G)
 AZP = mat('Pipetador azul', (0.08, 0.30, 0.72), 0.1, 0.45)
 cyl('Pipetador empunhadura', 0.017, -0.045, 0.075, (0, 0), 'Z', AZP, PIPETA, seg=16)
 cbox('Pipetador gatilhos', 0.012, 0.030, -0.008, 0.008, -0.02, 0.05, mat('Pipetador gatilho cinza', (0.55, 0.57, 0.6), 0.0, 0.5), PIPETA, 0.003)
-cyl('Pipetador bocal', 0.011, -0.075, -0.045, (0, 0), 'Z', mat('Pipetador bocal branco', (0.9, 0.9, 0.9), 0.0, 0.4), PIPETA, seg=14)
-VP = mat('Pipeta sorologica 50 mL', (0.86, 0.93, 0.97), 0.0, 0.08, alpha=0.5)
-cyl('Pipeta sorologica 50 mL', 0.0078, -0.395, -0.075, (0, 0), 'Z', VP, PIPETA, seg=12)
-cyl('Pipeta ponta', 0.0030, -0.42, -0.395, (0, 0), 'Z', VP, PIPETA, seg=8, r2=0.0078)
-for k in range(6):
-    cyl(f'Pipeta graduacao {k}', 0.0080, -0.36 + k * 0.05, -0.358 + k * 0.05, (0, 0), 'Z', mat('Graduacao preta', (0.05, 0.05, 0.05), 0.0, 0.5), PIPETA, seg=12)
+cyl('Pipetador bocal', 0.012, -0.080, -0.045, (0, 0), 'Z', mat('Pipetador bocal branco', (0.9, 0.9, 0.9), 0.0, 0.4), PIPETA, seg=14)
+VP = mat('Pipeta sorologica 100 mL', (0.86, 0.93, 0.97), 0.0, 0.08, alpha=0.5)
+cyl('Pipeta sorologica 100 mL', 0.0092, -0.440, -0.080, (0, 0), 'Z', VP, PIPETA, seg=12)
+cyl('Pipeta ponta', 0.0030, -0.47, -0.440, (0, 0), 'Z', VP, PIPETA, seg=8, r2=0.0092)
+cyl('Pipeta filtro algodao', 0.0088, -0.105, -0.085, (0, 0), 'Z', mat('Filtro algodao', (0.97, 0.97, 0.95), 0.0, 0.9), PIPETA, seg=12)
+for k in range(10):
+    cyl(f'Pipeta graduacao {k}', 0.0094, -0.40 + k * 0.03, -0.3985 + k * 0.03, (0, 0), 'Z', mat('Graduacao preta', (0.05, 0.05, 0.05), 0.0, 0.5), PIPETA, seg=12)
 TABLET = empty('TABLET_SUPERVISOR', (0, 0, 0), G)
 cbox('Tablet corpo', -0.125, 0.125, -0.085, 0.085, -0.004, 0.004, mat('Tablet grafite', (0.08, 0.08, 0.09), 0.4, 0.4), TABLET, 0.006)
 from PIL import Image, ImageDraw, ImageFont
@@ -559,7 +564,7 @@ print('IK assada', round(time.time() - T0))
 # ------------------------------------------------ finaliza e exporta
 room.finalize_static(G, {'TV_TELA', 'RELOGIO_TELA', 'PAINEL_TQ_TELA'})
 bpy.ops.wm.save_as_mainfile(filepath='/home/claude/sala/out/SALA_CENA.blend')
-path = '/home/claude/sala/web/assets/sala_cena.glb'
+path = '/home/claude/sala/web/assets/sala_cena21.glb'
 os.makedirs(os.path.dirname(path), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_animations=True, export_animation_mode='SCENE',
                           export_frame_range=True, export_force_sampling=False, export_optimize_animation_size=True,
@@ -583,5 +588,5 @@ WEB = dict(T_END=T_END, K=PL['K'], SIM_T0=PL['SIM_T0'], VOL_CICLO=PL['VOL_CICLO'
            steps=STEPS, sup_windows=PL['sup_windows'], cafe=PL['cafe'], STAGGER=PL['STAGGER'],
            pts=dict(door=[(DOOR['x0'] + DOOR['x1']) / 2, -RY], tank=[TANK['x'], TANK['y']], panel=[PANEL['x'], PANEL['y']], pump=[PUMP['x'], PUMP['y']],
                     ihm={k: v['ihm'] for k, v in MP.items()}))
-json.dump(WEB, open('/home/claude/sala/web/assets/roteiro.json', 'w'), default=float)
+json.dump(WEB, open('/home/claude/sala/web/assets/roteiro21.json', 'w'), default=float)
 print('EXPORT OK', os.path.getsize(path), round(time.time() - T0))

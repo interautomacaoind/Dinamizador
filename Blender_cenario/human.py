@@ -264,7 +264,147 @@ def build_human(tag, targets, skin_png, coat_png, pants_png, shoes_png, top_rgb,
     add_proxy('jaleco', 'clothes/Coat/Coat.json', img_mat(tag + ' jaleco', coat_png, rough=0.8, spec=0.3), inflate=inflate_coat)
     if glasses:
         add_proxy('oculos', 'clothes/glasses/glasses.json', img_mat(tag + ' oculos', MHD + 'proxies/clothes/glasses/textures/glasses.png', rough=0.2, metal=0.3, alpha=True))
+    CTX[tag] = dict(Vm=Vm, V3=V3, ao=ao, body=body, used=used_b, mats_by=mats_by, objs=objs, add_proxy=add_proxy)
     return ao, objs, V3
+
+
+CTX = {}
+
+
+def _proxy_part(tag, label, path, keep, mats, mat_of=None, inflate=0.0, shrink_c=None):
+    """proxy com filtro de faces (keep(F, fc, dom) -> bool por face) e materiais por face"""
+    c = CTX[tag]; ao = c['ao']
+    d = proxy(path)
+    F = cv(fit_proxy(d, c['Vm']))
+    ipv = d.get('influencesPerVertex', 4)
+    si = np.array(d['skinIndices']).reshape(-1, ipv); sw = np.array(d['skinWeights'], float).reshape(-1, ipv)
+    dom = [BN.get(int(si[v, np.argmax(sw[v])]), '') for v in range(len(F))]
+    fc = parse_faces(d['faces'])
+    if shrink_c is not None:
+        F = shrink_c(F)
+    sel = [(mat_of(F, vs, dom) if mat_of else 0) if keep(F, vs, dom) else -1 for (vs, m, uv) in fc]
+    uvs = np.array(d['uvs'][0], float).reshape(-1, 2)
+    ob, used = build_obj(f'{tag} {label}', F, fc, uvs, (d['skinIndices'], d['skinWeights']), sel, mats, ao, ipv=ipv)
+    if inflate:
+        for v in ob.data.vertices: v.co += v.normal * inflate
+    c['objs'].append(ob)
+    return ob
+
+
+def add_uniform(tag, suit, top_rgb, pants_rgb, glove_rgb=None, hair=None, hair_rgb=(0.10, 0.07, 0.05), teeth=True,
+                badge=None, sex='F'):
+    """REV21: roupa de baixo real (camisa/blusa + calça) sob o jaleco, luvas nitrílicas, cabelo sob a touca,
+    dentes e língua (aparecem no sorriso), crachá e caneta no bolso"""
+    c = CTX[tag]; V3 = c['V3']; body = c['body']
+    hipz = V3[JPI['upperleg01.L____head']].mean(0)[2]
+    waist = hipz + 0.09
+    # 1) corpo sob a roupa recua 4 mm (evita a pele atravessar o tecido)
+    me = body.data
+    sl = [p.material_index for p in me.polygons]
+    move = set()
+    for p in me.polygons:
+        if p.material_index in (1, 2): move.update(p.vertices)
+    for i in move: me.vertices[i].co -= me.vertices[i].normal * 0.004
+    # 1b) meia/cano do sapato que atravessava a barra da calça: corta acima de 9 cm
+    import bmesh
+    sh = [o for o in c['objs'] if o.name.endswith(' sapatos')][0]
+    bm = bmesh.new(); bm.from_mesh(sh.data)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z > 0.09], context='VERTS')
+    bm.to_mesh(sh.data); bm.free()
+    # 2) roupa interna: uma malha MakeHuman, dois tecidos separados pela cintura
+    src = MHD + f'proxies/clothes/{suit}/textures/{suit}_diffuse.png'
+    tt = tex_recolor(src, TEX + f'{tag}_top.png', 0.86, 1.0, top_rgb, blur=2.5)
+    tp = tex_recolor(src, TEX + f'{tag}_pants.png', 0.80, 1.0, pants_rgb, blur=2.5)
+    mt = img_mat(tag + ' camisa uniforme', tt, rough=0.82, spec=0.25)
+    mp = img_mat(tag + ' calca uniforme', tp, rough=0.85, spec=0.2)
+    zc = lambda F, vs: F[list(vs), 2].mean()
+    _proxy_part(tag, 'uniforme', f'clothes/{suit}/{suit}.json', lambda F, vs, dom: True, [mt, mp],
+                mat_of=lambda F, vs, dom: 0 if zc(F, vs) > waist else 1)
+    # 3) luvas nitrílicas (punho até meio antebraço, por cima da manga)
+    if glove_rgb:
+        mg = img_mat(tag + ' luva nitrilica', None, rough=0.42, spec=0.45, tint=glove_rgb)
+        HAND = re.compile(r'^(wrist|finger|metacarpal|lowerarm02)')
+        _proxy_part(tag, 'luvas', 'clothes/Harvey_MadScientistGlovesV1/Harvey_MadScientistGlovesV1.json',
+                    lambda F, vs, dom: all(HAND.match(dom[v]) for v in vs), [mg])
+    # 4) cabelo: só o que fica abaixo da borda da touca (têmporas, costeletas, nuca); o resto recolhido sob a touca
+    if hair:
+        ze = V3[JPI['eye.L____head']].mean(0)[2]
+        H = V3[:NBODY]
+        si = np.array(BASE['skinIndices']).reshape(-1, 4); sw = np.array(BASE['skinWeights']).reshape(-1, 4)
+        hm = np.array([BN.get(int(si[v, np.argmax(sw[v])]), '') == 'head' for v in range(NBODY)])
+        C = np.array([H[hm, 0].mean(), H[hm, 1].mean() + 0.012, ze + 0.005])
+        def shrink(F):
+            F = F.copy(); D = F - C
+            r = np.linalg.norm(D, axis=1)[:, None]
+            # aproxima do crânio (cabelo preso/achatado sob a touca)
+            k = np.where(D[:, 2:3] > 0.035, 0.90, 1.0)
+            return C + D * k
+        mh = img_mat(tag + ' cabelo', MHD + f'proxies/hair/{hair}/textures/{hair}_diffuse.png', rough=0.55, spec=0.35, alpha=True)
+        nt = mh.node_tree; bs = nt.nodes['Principled BSDF']
+        mix = nt.nodes.new('ShaderNodeMixRGB'); mix.blend_type = 'MULTIPLY'; mix.inputs['Fac'].default_value = 1.0
+        mix.inputs['Color2'].default_value = (*[min(1, x * 2.0) for x in hair_rgb], 1)
+        tx = [n for n in nt.nodes if n.type == 'TEX_IMAGE'][0]
+        nt.links.new(tx.outputs['Color'], mix.inputs['Color1']); nt.links.new(mix.outputs['Color'], bs.inputs['Base Color'])
+        zmin = ze - (0.075 if sex == 'F' else 0.06)
+        yb = C[1] + (0.0 if sex == 'F' else 0.03)        # operadora: só a frente (têmporas/costeletas); nuca toda dentro da touca
+        _proxy_part(tag, 'cabelo', f'hair/{hair}/{hair}.json',
+                    lambda F, vs, dom: F[list(vs), 2].min() > zmin and F[list(vs), 1].max() < yb, [mh], shrink_c=shrink)
+    # 5) dentes e língua
+    if teeth:                                         # (só quem sorri na cena)
+        _proxy_part(tag, 'dentes', 'teeth/Teeth_Base/Teeth_Base.json', lambda F, vs, dom: True,
+                    [img_mat(tag + ' dentes', MHD + 'proxies/teeth/Teeth_Base/textures/teeth.png', rough=0.3, spec=0.5)])
+        _proxy_part(tag, 'lingua', 'tongue/tongue01/tongue01.json', lambda F, vs, dom: True,
+                    [img_mat(tag + ' lingua', MHD + 'proxies/tongue/tongue01/textures/tongue01_diffuse.png', rough=0.4, spec=0.5)])
+    # 6) crachá (cordão não; presilha no bolso) + caneta no bolso do peito
+    if badge:
+        coat = [o for o in c['objs'] if o.name.endswith(' jaleco')][0]
+        CV = np.array([tuple(v.co) for v in coat.data.vertices])
+        zs = V3[JPI['clavicle.L____head']].mean(0)[2]
+        bz = zs - 0.15
+        side = 1.0
+        msk = (np.abs(CV[:, 2] - bz) < 0.02) & (np.abs(CV[:, 0] - side * 0.085) < 0.02)
+        fy = CV[msk, 1].min() if msk.any() else -0.12
+        P = Vector((side * 0.085, fy - 0.004, bz))
+        me = bpy.data.meshes.new(tag + ' cracha')
+        w, h = 0.054, 0.086
+        me.from_pydata([(-w/2, 0, -h), (w/2, 0, -h), (w/2, 0, 0), (-w/2, 0, 0)], [], [(0, 1, 2, 3)])
+        ul = me.uv_layers.new(); ul.data.foreach_set('uv', [0, 0, 1, 0, 1, 1, 0, 1])
+        me.materials.append(img_mat(tag + ' cracha', badge, rough=0.35, spec=0.5))
+        ob = bpy.data.objects.new(tag + ' cracha', me); bpy.context.scene.collection.objects.link(ob)
+        ob.location = P; ob.rotation_euler = (math.radians(-8), 0, 0)
+        ob.parent = c['ao']
+        vg = ob.vertex_groups.new(name='spine02'); vg.add([0, 1, 2, 3], 1.0, 'REPLACE')
+        ob.modifiers.new('Armature', 'ARMATURE').object = c['ao']
+        # caneta no bolso do lado oposto
+        import bmesh
+        bm = bmesh.new(); bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=0.0055, radius2=0.0055, depth=0.13)
+        me2 = bpy.data.meshes.new(tag + ' caneta'); bm.to_mesh(me2); bm.free()
+        mc = bpy.data.materials.new(tag + ' caneta azul'); mc.use_nodes = True
+        mc.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.03, 0.12, 0.45, 1)
+        me2.materials.append(mc)
+        ob2 = bpy.data.objects.new(tag + ' caneta', me2); bpy.context.scene.collection.objects.link(ob2)
+        msk = (np.abs(CV[:, 2] - (bz - 0.02)) < 0.02) & (np.abs(CV[:, 0] + 0.09) < 0.02)
+        fy2 = CV[msk, 1].min() if msk.any() else -0.12
+        ob2.location = (-0.095, fy2 + 0.004, bz - 0.01); ob2.parent = c['ao']
+        vg = ob2.vertex_groups.new(name='spine02'); vg.add(list(range(len(me2.vertices))), 1.0, 'REPLACE')
+        ob2.modifiers.new('Armature', 'ARMATURE').object = c['ao']
+
+
+def badge_tex(path, nome, cargo, cor=(47, 191, 113)):
+    from PIL import ImageDraw, ImageFont
+    W, H = 216, 344
+    im = Image.new('RGB', (W, H), (250, 250, 250)); d = ImageDraw.Draw(im)
+    try:
+        fb = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 30)
+        fn = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 20)
+    except Exception:
+        fb = fn = ImageFont.load_default()
+    d.rectangle([0, 0, W, 64], fill=cor); d.text((14, 14), 'CMR', font=fb, fill='white')
+    d.ellipse([58, 84, 158, 184], fill=(205, 180, 160)); d.rectangle([58, 150, 158, 200], fill=(240, 240, 240))
+    d.text((14, 214), nome, font=fb, fill=(20, 30, 40)); d.text((14, 256), cargo, font=fn, fill=(70, 80, 90))
+    d.rectangle([14, 296, W - 14, 326], fill=(30, 30, 30))
+    for i in range(18, W - 18, 7): d.rectangle([i, 300, i + 3, 322], fill='white')
+    im.save(path); return path
 
 
 def textures():

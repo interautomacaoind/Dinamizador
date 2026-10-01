@@ -1,4 +1,4 @@
-# Layout da sala (coordenadas Blender: x = largura 10 m, y = comprimento 10 m, z para cima) — REV17: sala 10 x 10 m
+# Layout da sala (coordenadas Blender: x = largura 10 m, y = comprimento 10 m, z para cima) — REV21: sala 10 x 10 m, 4 × REV20 3G
 import math
 import numpy as np
 
@@ -8,16 +8,16 @@ SIM_T0 = 7 * 3600.0               # 07:00:00
 
 # máquinas: (nome, x, y, rotação em graus) — frente das máquinas voltada para o corredor central
 MACH = [('M1', 3.30, -2.30, -90.0), ('M2', 3.30, 2.30, -90.0), ('M3', -3.30, 2.30, 90.0), ('M4', -3.30, -2.30, 90.0)]
-MB = (-0.72, 1.09, -0.66, 0.66)   # caixa local da máquina (com quadro) — sem estação lateral no REV17
+MB = (-0.72, 1.11, -0.41, 0.41)   # REV21: caixa local da dinamizadora REV20 3G (3 × 10 L, acesso só pela frente)
 
-IHM_L = (0.875, -0.6265, 1.50)
-BTN_INI_L = (0.79, -0.622, 1.30)
-# bocais de pipetagem (topo do bocal com o cabeçote FECHADO sobre o garrafão): P1–P3 frente, P4–P6 traseira
-Z_BOCAL = 1.862 - 0.512
-PORTS_L = [(-0.402, -0.34, Z_BOCAL), (0.018, -0.34, Z_BOCAL), (0.438, -0.34, Z_BOCAL),
-           (-0.402, 0.34, Z_BOCAL), (0.018, 0.34, Z_BOCAL), (0.438, 0.34, Z_BOCAL)]
-DOOR_PLANE = 0.60                 # portas frontal/traseira em y = -/+0,60 (local)
-STUB_L = {'BASE': (0.86, 0.22), 'PRODUTO': (0.86, 0.42)}
+IHM_L = (0.89, -0.4285, 1.52)
+BTN_INI_L = (0.82, -0.426, 1.30)
+# bocais de pipetagem (topo do funil do inserto GL80, garrafão fixado): G1–G3, todos pela frente
+Z_BOCAL = 1.15
+PORTS_L = [(-0.42, -0.102, Z_BOCAL), (0.0, -0.102, Z_BOCAL), (0.42, -0.102, Z_BOCAL)]
+BOT_L = [(-0.42, -0.08), (0.0, -0.08), (0.42, -0.08)]   # eixo dos garrafões (local)
+DOOR_PLANE = 0.41                 # portas frontais (2 folhas de 0,68 m) em y = -0,41 (local)
+STUB_L = {'BASE': (0.89, 0.22), 'PRODUTO': (0.89, 0.38)}
 
 DOOR = dict(x0=3.00, x1=4.20, y=-RY, h=2.20)          # porta de entrada (canto frontal direito)
 TANK = dict(x=0.0, y=0.0, r=0.42, z0=0.55, z1=1.55)   # tanque de passagem 250 L
