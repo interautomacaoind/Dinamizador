@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Berço de pesagem · CMR REV22</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#dfe3e7;font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#e8eef3}
+  #p{position:fixed;left:12px;top:12px;max-width:min(430px,calc(100vw - 24px));background:rgba(18,24,32,.88);border-radius:12px;padding:10px 14px}
+  #p h1{font-size:15px;margin:0 0 4px} #p small{color:#9fb0bf}
+  #b{position:fixed;left:12px;right:12px;bottom:12px;display:flex;flex-wrap:wrap;gap:8px}
+  #b button{background:rgba(18,24,32,.88);color:#fff;border:1px solid #3a4854;border-radius:8px;padding:8px 12px;font-size:14px;cursor:pointer}
+  #b button.on{background:#2fbf71;border-color:#2fbf71}
+  #b a{background:#26323d;color:#e8eef3;border-radius:8px;padding:8px 12px;text-decoration:none}
+</style>
+<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/addons/":"./lib/addons/"}}</script></head>
+<body>
+<div id="p"><h1>Berço de pesagem por garrafão · REV22</h1><small id="txt"></small></div>
+<div id="b">
+  <button data-m="pesando" class="on">⚖ Pesando (dosagem)</button><button data-m="travada">🔒 Travada (mistura)</button><button data-m="aberto">🔓 Grampo aberto (troca)</button>
+  <button id="xr">Sem carenagem</button><a href="index.html">↩ Sala REV22</a>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { buildMaquina10 } from './maq10.js?v=22';
+import { materiaisMaquina } from './matmaq.js?v=21';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setPixelRatio(Math.min(devicePixelRatio, 1.5)); r.setSize(innerWidth, innerHeight);
+r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; document.body.prepend(r.domElement);
+const sc = new THREE.Scene(); sc.background = new THREE.Color(0xdfe3e7);
+sc.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.03).texture; sc.environmentIntensity = 0.8;
+sc.add(new THREE.HemisphereLight(0xffffff, 0x9aa2a8, 1.2)); const d = new THREE.DirectionalLight(0xffffff, 1.0); d.position.set(2, 5, 3); sc.add(d);
+const fl = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.85 })); fl.rotation.x = -Math.PI / 2; sc.add(fl);
+const P = buildMaquina10(materiaisMaquina(), { n: 3, nome: 'M1', balanca: true }); sc.add(P.root);
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.02, 50); cam.position.set(0.75, 1.15, 1.45);
+const ctl = new OrbitControls(cam, r.domElement); ctl.target.set(0.0, 0.88, 0.05); ctl.enableDamping = true; ctl.update();
+addEventListener('resize', () => { cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); r.setSize(innerWidth, innerHeight); });
+const TXT = {
+  pesando: 'Cada garrafão fica num berço com <b>célula de carga própria</b> (single point 30 kg, C3). O grampo de alavanca e o anel de PU estão <b>no próprio berço</b>: a força de fixação fecha dentro dele e entra na tara. Só as mangueiras de silicone (com laço de alívio) ligam o berço ao carro. Dosagem por peso: 6,790 kg (7 L × 0,97).',
+  travada: 'Na mistura (sucussão) e na troca do garrafão, 2 mini-cilindros Ø25 levantam a plataforma 1 mm contra os batentes em L: a <b>célula fica descarregada</b> (sem choque, sem fadiga). O indicador mostra TRAVADA.',
+  aberto: 'Fim do lote: balança travada, o operador destrava a alavanca vermelha e o braço bascula ~110° para trás. Garrafão drenado sai pela frente. Fecha-se uma vez por lote — não abre a cada ciclo.' };
+let modo = 'pesando', alvo = { cl: 1, lk: 0 }, cur = { cl: 1, lk: 0 }, sem = false, t0 = performance.now();
+function set(m) { modo = m; alvo = m === 'pesando' ? { cl: 1, lk: 0 } : m === 'travada' ? { cl: 1, lk: 1 } : { cl: 0, lk: 1 }; t0 = performance.now();
+  document.querySelectorAll('#b button[data-m]').forEach((b) => b.classList.toggle('on', b.dataset.m === m)); document.getElementById('txt').innerHTML = TXT[m]; }
+document.querySelectorAll('#b button[data-m]').forEach((b) => b.onclick = () => set(b.dataset.m));
+document.getElementById('xr').onclick = (e) => { sem = !sem; e.target.classList.toggle('on', sem); for (const o of P.skins) o.visible = !sem; };
+set('pesando'); P.state.doorsF = 1;
+r.setAnimationLoop(() => {
+  const k = 0.06; cur.cl += (alvo.cl - cur.cl) * k; cur.lk += (alvo.lk - cur.lk) * 0.15;
+  const tt = (performance.now() - t0) / 1000;
+  P.state.lock = cur.lk;
+  P.bottles.forEach((B, i) => { B.clampSt = cur.cl;
+    const lev = modo === 'pesando' ? Math.min(1, tt / 6) : modo === 'travada' ? 1 : 0;
+    B.levelSt = lev; B.massa = lev < 0.97 ? lev * 6.79 + 0.002 * Math.sin(tt * 20 + i) : 6.79; B.tint = modo === 'travada' ? 0.6 : 0;
+    B.balMsg = modo === 'pesando' ? (lev < 0.8 ? 'dosagem grossa' : lev < 1 ? 'dosagem fina' : 'alvo 6,790 ✓') : modo === 'travada' ? 'sucussão' : 'troca do garrafão'; });
+  P.state.shake = modo === 'travada' ? 1 : 0; P.state.crank = modo === 'travada' ? tt * 4 * Math.PI : 0;
+  P.apply(); ctl.update(); r.render(sc, cam);
+});
+window.__ready = true; window.__set = set; window.__cam = (p, t) => { cam.position.set(...p); ctl.target.set(...t); ctl.update(); };
+</script></body></html>

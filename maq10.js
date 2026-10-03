@@ -7,7 +7,8 @@ import * as THREE from 'three';
 
 // ---------------------------------------------------------------- dados do garrafão (DURAN GLS 80 10 L como referência)
 export const GARRAFAO = { D: 0.2293, H: 0.385, rosca: 'GL80', vol: 10, enche: 0.7, nivel: 0.192, pip: 60 };
-const Yb = 0.712;               // fundo do garrafão (sobre o liner do copo) com o carro no ponto médio
+const YB0 = 0.712;              // fundo do garrafão (sobre o liner do copo) com o carro no ponto médio
+const BAL_DY = 0.056;           // REV22: base de pesagem (célula + plataforma) eleva o copo 56 mm
 const CLAMP_STROKE = 0.20;      // curso do cilindro (garra sobe acima do garrafão para retirada)
 const SHAKE_R = 0.03;           // raio da manivela → curso de sucussão 60 mm
 
@@ -21,6 +22,8 @@ function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.w
 export function buildMaquina10(M, opts) {
   const N = opts.n;                         // 4 ou 3
   const tres = N === 3;
+  const BAL = !!opts.balanca;               // REV22: berço de pesagem com célula de carga, grampo no próprio berço e trava de sucussão
+  const Yb = YB0 + (BAL ? BAL_DY : 0);
   const nome = opts.nome || (tres ? 'M2' : 'M1');
   const root = new THREE.Group(); root.name = `CMR_REV20_${N}G_${nome}`;
   const fixed = new THREE.Group(); fixed.name = 'FIXO'; root.add(fixed);
@@ -106,6 +109,7 @@ export function buildMaquina10(M, opts) {
   const zc = (z) => (tres ? z - 0.17 : z - Math.sign(z) * 0.19);                                          // posição z do cilindro (atrás do garrafão)
   const vigasZ = [...new Set(pos.map(([x, z]) => +zc(z).toFixed(3)))];
   for (const z of vigasZ) box(PX * 2 - 0.15, 0.05, 0.06, I316, 0, YT, z, carro);
+  if (BAL) for (const z of [...new Set(pos.map(([x, z]) => z))]) { box(PX * 2 - 0.15, 0.04, 0.04, I316, 0, YT, z, carro); }   // REV22: viga de ancoragem das mangueiras sobre os garrafões
   // ---- por garrafão
   const graduacao = canvasTex(256, 1024, (g, w, h) => {                                                // escala em esmalte branco (0,5 L)
     g.clearRect(0, 0, w, h); g.strokeStyle = '#fff'; g.fillStyle = '#fff'; g.lineWidth = 4;
@@ -123,13 +127,13 @@ export function buildMaquina10(M, opts) {
     const k = i + 1, L = lado(z);
     const B = { k, x, z, lado: L };
     // copo cônico (UHMW + liner PU) fixo na bandeja
-    const copo = new THREE.Group(); copo.position.set(x, 0.697, z); carro.add(copo);
+    const copo = new THREE.Group(); copo.position.set(x, 0.697 + (BAL ? BAL_DY : 0), z); carro.add(copo);
     const cOut = new THREE.Mesh(new THREE.CylinderGeometry(0.138, 0.132, 0.10, 40, 1, true), UHMW); cOut.position.y = 0.05; copo.add(cOut);
     const cIn = new THREE.Mesh(new THREE.CylinderGeometry(0.1185, 0.1165, 0.10, 40, 1, true), PU); cIn.position.y = 0.05; cIn.material = PU; copo.add(cIn);
     const rim = new THREE.Mesh(new THREE.RingGeometry(0.1185, 0.138, 40).rotateX(-Math.PI / 2), UHMW); rim.position.y = 0.10; copo.add(rim);
     const fundo = new THREE.Mesh(new THREE.CircleGeometry(0.12, 40).rotateX(-Math.PI / 2), PRETO); fundo.position.y = 0.012; copo.add(fundo);
     for (const a of [Math.PI / 2 * L, -Math.PI / 2 * L]) { const r = box(0.04, 0.05, 0.004, PRETO, Math.cos(a) * 0.0, 0.075, 0, copo, false); r.position.set(Math.sin(a) * 0.137, 0.075, Math.cos(a) * 0.137); r.rotation.y = a; }   // rasgos p/ dedos
-    cyl(0.012, 0.03, M.amarelo, x + 0.0, 0.672, z, carro, 12);                                              // sensor capacitivo "garrafão presente"
+    if (!BAL) cyl(0.012, 0.03, M.amarelo, x + 0.0, 0.672, z, carro, 12);                                    // sensor capacitivo "garrafão presente" (na REV22 a balança detecta)
     // garrafão (grupo móvel para colocar/retirar)
     const gb = new THREE.Group(); gb.name = `GARRAFAO_10L_G${k}`; gb.position.set(x, Yb, z); carro.add(gb);
     const vidro = new THREE.Mesh(vidroGeo, GLASS); vidro.renderOrder = 2; gb.add(vidro);
@@ -174,6 +178,7 @@ export function buildMaquina10(M, opts) {
       if (tipo !== 'RESPIRO') { const p = cyl(0.006, 0.34, I316, px, -0.14, pz, tampa, 12); const ponta = cyl(0.0065, 0.02, PTFE, px, -0.315, pz, tampa, 12); }
     }
     B.uniaoTops = unioes;
+    if (!BAL) {
     // garra: cilindro pneumático guiado (Ø50 · curso 200) preso na viga do carro + braço + anel em U com PU no ombro
     const zcyl = zc(z), cz = zcyl;
     const cilG = new THREE.Group(); cilG.position.set(x, 0, cz); carro.add(cilG);
@@ -198,6 +203,70 @@ export function buildMaquina10(M, opts) {
     const puCone2 = new THREE.Mesh(new THREE.CylinderGeometry(0.070, 0.098, 0.024, 48, 1, true, ang0 + Math.PI / 2, ab), PU); puCone2.material = PU; puCone2.position.set(0, -0.029, dz); puCone2.scale.set(0.985, 1, 0.985); haste.add(puCone2);
     puCone.material = PU;
     B.garra = { haste, yYokeTop, sensores };
+    } else {
+    // ===================== REV22 · BERÇO DE PESAGEM (célula de carga individual) =====================
+    // Tudo o que está no berço (plataforma, copo, coluna, grampo, garrafão, tampa) entra na tara: as forças de fixação
+    // fecham dentro do próprio berço e não aparecem na pesagem. Só as mangueiras flexíveis cruzam para o carro.
+    const s_ = Math.sign(z - zc(z)) || 1, cz = zc(z), dz = z - cz;
+    const ZT = 0.697;                                                                                           // topo da bandeja do carro
+    // célula de carga "single point" (barra de alumínio com furo binocular), 30 kg C3, IP67
+    box(0.03, 0.008, 0.04, I316, x - 0.05, ZT + 0.004, z, carro, false);                                      // calço lado fixo
+    const cel = box(0.13, 0.030, 0.04, ALU, x, ZT + 0.008 + 0.015, z, carro, false); cel.name = `CELULA_CARGA_G${k}`;
+    for (const hx of [-0.013, 0.013]) { const h = cyl(0.009, 0.041, PRETO, x + hx, ZT + 0.023, z, carro, 16); h.rotation.x = Math.PI / 2; }
+    { const h = box(0.03, 0.006, 0.041, PRETO, x, ZT + 0.023, z, carro, false); }                             // ponte do binocular
+    { const g = cyl(0.006, 0.02, PRETO, x - 0.072, ZT + 0.023, z, carro, 10); g.rotation.z = Math.PI / 2; }   // prensa-cabo
+    box(0.03, 0.008, 0.04, I316, x + 0.05, ZT + 0.042, z, carro, false);                                      // calço lado da carga
+    // plataforma do berço (inox 316) + orelhas das travas + língua até a coluna do grampo
+    const PY = ZT + 0.051;                                                                                      // centro da plataforma (10 mm)
+    box(0.30, 0.010, 0.29, I316, x, PY, z, carro);
+    for (const sx of [-1, 1]) box(0.05, 0.010, 0.06, I316, x + sx * 0.165, PY, z, carro);
+    box(0.06, 0.010, Math.abs(dz) - 0.10, I316, x, PY, cz + s_ * (Math.abs(dz) - 0.10) / 2 + s_ * 0.0, carro);
+    // batentes de sobrecarga (4 parafusos com folga de 1 mm)
+    for (const [ox, oz] of [[-0.12, -0.11], [0.12, -0.11], [-0.12, 0.11], [0.12, 0.11]]) cyl(0.006, 0.044, CROMO, x + ox, ZT + 0.022, z + oz, carro, 10);
+    // travas de sucussão: mini-cilindro Ø25 (curso 5 mm) sob cada orelha levanta a plataforma 1 mm contra o batente em L
+    // → durante a mistura e na troca do garrafão a célula fica descarregada (sem choque nem fadiga)
+    B.locks = []; B.lockLeds = [];
+    for (const sx of [-1, 1]) {
+      const lx = x + sx * 0.165;
+      box(0.032, 0.030, 0.032, ALU, lx, ZT + 0.015, z, carro, false);                                         // corpo do cilindro
+      const rod = cyl(0.006, 0.012, CROMO, lx, ZT + 0.036, z, carro, 10); B.locks.push(rod);
+      box(0.012, 0.075, 0.03, I316, lx + sx * 0.031, ZT + 0.0375, z, carro, false);                          // coluna do batente
+      box(0.04, 0.008, 0.03, I316, lx + sx * 0.017, PY + 0.013, z, carro, false);                            // aba do batente (L) sobre a orelha
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffa21a })); led.position.set(lx, ZT + 0.02, z + 0.017 * L); carro.add(led); B.lockLeds.push(led);
+    }
+    // coluna do grampo (no berço) + pacote de molas-prato + articulação
+    const hingeY = Yb + 0.350;
+    cyl(0.016, hingeY - PY - 0.03, I316, x, (PY + hingeY - 0.03) / 2 + 0.003, cz, carro, 20);
+    for (let i = 0; i < 5; i++) cyl(0.024, 0.005, i % 2 ? CROMO : I316, x, hingeY - 0.075 + i * 0.006, cz, carro, 24);
+    box(0.07, 0.05, 0.05, I316, x, hingeY - 0.012, cz, carro);                                                // bloco da articulação
+    const sensG = cyl(0.006, 0.03, M.amarelo, x + 0.042, hingeY - 0.012, cz, carro, 10); sensG.rotation.z = Math.PI / 2;
+    const ledG = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), new THREE.MeshBasicMaterial({ color: 0x35ff6a })); ledG.position.set(x + 0.058, hingeY - 0.012, cz); carro.add(ledG);
+    // braço basculante (grampo de alavanca tipo "toggle" vertical) com anel em U + PU cônico no ombro
+    const flip = new THREE.Group(); flip.position.set(x, hingeY, cz); carro.add(flip);
+    box(0.05, 0.016, Math.abs(dz) - 0.06, I316, 0, -0.008, dz / 2, flip);
+    const ab = Math.PI * 1.5, ang0 = (L > 0 ? -Math.PI / 2 : Math.PI / 2) + (2 * Math.PI - ab) / 2;
+    const sh = new THREE.Shape(); sh.absarc(0, 0, 0.108, ang0, ang0 + ab, false); sh.absarc(0, 0, 0.066, ang0 + ab, ang0, true);
+    const anelU = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.014, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1, curveSegments: 40 }).rotateX(-Math.PI / 2), I316);
+    anelU.position.set(0, -0.014, dz); flip.add(anelU);
+    const puCone = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.100, 0.024, 48, 1, true, ang0 + Math.PI / 2, ab), PU); puCone.position.set(0, -0.028, dz); flip.add(puCone);
+    // alavanca com manopla vermelha (sobre-centro: travada com o braço na horizontal)
+    const alav = new THREE.Group(); alav.position.set(0, 0.012, 0); flip.add(alav);
+    const barra = box(0.014, 0.014, 0.15, I316, 0, 0.0, -s_ * 0.075, alav, false);
+    const mano = cyl(0.013, 0.07, M.vermelho, 0, 0.0, -s_ * 0.16, alav, 16); mano.rotation.x = Math.PI / 2;
+    alav.rotation.x = s_ * 0.55;
+    B.flip = { g: flip, s: s_, alav, led: ledG };
+    // indicador de peso na frente do berço (voltado para a porta)
+    const dcv = document.createElement('canvas'); dcv.width = 256; dcv.height = 128;
+    const dtx = new THREE.CanvasTexture(dcv); dtx.colorSpace = THREE.SRGBColorSpace;
+    const dG = new THREE.Group(); dG.position.set(x + 0.095, ZT + 0.035, z + L * 0.185); if (L < 0) dG.rotation.y = Math.PI; carro.add(dG);
+    const caixa = box(0.10, 0.06, 0.022, GRAF, 0, 0, 0, dG, false); caixa.rotation.x = -0.45;
+    const tela = new THREE.Mesh(new THREE.PlaneGeometry(0.088, 0.044), new THREE.MeshBasicMaterial({ map: dtx, toneMapped: false })); tela.position.set(0, 0.005, 0.0115); tela.rotation.x = -0.45;
+    { const tg = new THREE.Group(); tg.rotation.x = 0; dG.add(tg); tela.position.set(0, 0.0048, 0.0101); tg.add(tela); }
+    box(0.008, 0.035, 0.008, I316, 0, -0.03, -0.01, dG, false);
+    B.disp = { cv: dcv, g: dcv.getContext('2d'), tex: dtx, key: '' };
+    B.garra = null;
+    }
+
     // mangueiras: das uniões até um passa-parede na viga do carro (seguem o carro)
     B.hoses = [];
     B.gb = gb; B.tampa = tampa; B.anel = anel; B.ins = ins; B.sol = sol; B.solMat = solMat; B.copo = copo;
@@ -213,7 +282,18 @@ export function buildMaquina10(M, opts) {
       if (!vis) continue;
       for (const u of B.uniaoTops) {
         const a = u.g.getWorldPosition(new THREE.Vector3()); carro.worldToLocal(a); a.y += 0.045;
-        const end = new THREE.Vector3(B.x + (u.tipo === 'BASE' ? -0.03 : u.tipo === 'DRENO' ? 0.03 : 0), YT - 0.03, zc(B.z) + (B.z > zc(B.z) ? 0.045 : -0.045));
+        const offx = u.tipo === 'BASE' ? -0.03 : u.tipo === 'DRENO' ? 0.03 : 0;
+        if (BAL) {                                                                     // REV22: silicone fino com laço de alívio (não puxa o berço)
+          const e2 = new THREE.Vector3(B.x + offx, YT - 0.03, B.z);
+          const p1 = a.clone().add(new THREE.Vector3(0, 0.07, 0));
+          const p2 = a.clone().add(new THREE.Vector3(offx * 2.2 + 0.05, 0.17, 0.05 * B.lado));
+          const p3 = a.clone().add(new THREE.Vector3(offx * 1.2 - 0.04, 0.26, 0.02 * B.lado));
+          const p4 = new THREE.Vector3(B.x + offx, Math.min(e2.y - 0.06, a.y + 0.36), B.z);
+          const cv2 = new THREE.CatmullRomCurve3([a, p1, p2, p3, p4, e2]);
+          const t2 = new THREE.Mesh(new THREE.TubeGeometry(cv2, 40, u.big ? 0.0055 : 0.004, 8), HOSE[u.tipo]); carro.add(t2); B.hoses.push(t2);
+          continue;
+        }
+        const end = new THREE.Vector3(B.x + offx, YT - 0.03, zc(B.z) + (B.z > zc(B.z) ? 0.045 : -0.045));
         const mid = a.clone().lerp(end, 0.5); mid.y = Math.max(a.y, end.y) + 0.02; mid.z += (B.z - end.z) * 0.25;
         const curve = new THREE.CatmullRomCurve3([a, a.clone().add(new THREE.Vector3(0, 0.06, 0)), mid, end.clone().add(new THREE.Vector3(0, -0.05, 0)), end]);
         const t = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, u.big ? 0.008 : 0.005, 8), HOSE[u.tipo]); carro.add(t); B.hoses.push(t);
@@ -223,7 +303,7 @@ export function buildMaquina10(M, opts) {
   // laços de mangueira do carro até o compartimento superior (fixo)
   for (const B of parts.bottles) {
     for (const [i, tipo] of ['BASE', 'DRENO', 'RESPIRO'].entries()) {
-      const x = B.x + (i - 1) * 0.03, z = zc(B.z) + (B.z > zc(B.z) ? 0.045 : -0.045);
+      const x = B.x + (i - 1) * 0.03, z = BAL ? B.z : zc(B.z) + (B.z > zc(B.z) ? 0.045 : -0.045);
       const c = new THREE.CatmullRomCurve3([new THREE.Vector3(x, YT - 0.03, z), new THREE.Vector3(x, YT + 0.12, z), new THREE.Vector3(x + 0.02, YT + 0.22, z * 0.6), new THREE.Vector3(x, 1.86, z * 0.4)]);
       fixed.add(new THREE.Mesh(new THREE.TubeGeometry(c, 20, tipo === 'RESPIRO' ? 0.005 : 0.008, 8), HOSE[tipo]));
     }
@@ -302,9 +382,9 @@ export function buildMaquina10(M, opts) {
   Object.entries(tcol).forEach(([k, c], i) => { const m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.0, roughness: 0.3, transparent: true, opacity: 0.85 }); const o = cyl(0.03, 0.05, m, 0, 0.15 + (2 - i) * 0.052, 0, torre, 20); parts.torre[k] = m; });
 
   // ---------------------------------------------------------------- estado / animação
-  const st = { doorsF: 0, doorsT: 0, xray: 0, shake: 0, crank: 0, valves: {} };
+  const st = { doorsF: 0, doorsT: 0, xray: 0, shake: 0, crank: 0, valves: {}, lock: 1 };
   parts.state = st;
-  for (const B of parts.bottles) { B.seatSt = 1; B.capSt = 1; B.uniaoSt = 1; B.clampSt = 1; B.levelSt = 0; B.tint = 0; B.pipSt = 0; B.sensor = 0; }
+  for (const B of parts.bottles) { B.seatSt = 1; B.capSt = 1; B.uniaoSt = 1; B.clampSt = 1; B.levelSt = 0; B.tint = 0; B.pipSt = 0; B.sensor = 0; B.massa = 0; B.balMsg = ''; }
   parts.rebuildHoses();
   const _v = new THREE.Vector3();
   parts.apply = () => {
@@ -327,8 +407,20 @@ export function buildMaquina10(M, opts) {
       B.gb.visible = s > 0.001;
       const c = B.capSt; B.tampa.position.y = 0.352 + (1 - c) * 0.09; B.anel.rotation.y = (1 - c) * Math.PI * 3; B.tampa.visible = c > 0.001 || s < 0.999;
       B.uniaoTops.forEach((u) => { u.g.position.y = 0.021 + (1 - B.uniaoSt) * 0.03; u.g.rotation.y = (1 - B.uniaoSt) * 2.4; });
-      const cl = B.clampSt; B.garra.haste.position.y = B.garra.yYokeTop(cl) + 0.016;
-      B.garra.sensores[0].material = cl > 0.98 ? parts.ledOn || (parts.ledOn = new THREE.MeshBasicMaterial({ color: 0x35ff6a })) : M.amarelo;
+      const cl = B.clampSt;
+      if (B.garra) {
+        B.garra.haste.position.y = B.garra.yYokeTop(cl) + 0.016;
+        B.garra.sensores[0].material = cl > 0.98 ? parts.ledOn || (parts.ledOn = new THREE.MeshBasicMaterial({ color: 0x35ff6a })) : M.amarelo;
+      } else if (B.flip) {
+        const u = 1 - cl, e = u * u * (3 - 2 * u);
+        B.flip.g.rotation.x = -B.flip.s * 1.92 * e;                                   // braço sobe e bascula para trás (~110°)
+        B.flip.alav.rotation.x = B.flip.s * (0.55 + 0.9 * Math.min(1, u * 3));
+        B.flip.led.material.color.setHex(cl > 0.98 ? 0x35ff6a : 0x553311);
+        const lk = st.lock;
+        for (const r of B.locks) r.position.y = 0.697 + 0.036 + 0.004 * lk;
+        for (const l of B.lockLeds) l.material.color.setHex(lk > 0.5 ? 0xffa21a : 0x35ff6a);
+        parts.drawBalanca(B);
+      }
       B.sol.scale.y = Math.max(0.0001, B.levelSt * GARRAFAO.nivel - 0.002); B.sol.position.y = 0.008 + B.sol.scale.y / 2;
       B.solMat.color.setHex(0xcfe6f0).lerp(new THREE.Color(0xe0b25a), 0.45 * B.tint);
       if (B.lid) B.lid.rotation.x = -1.9 * B.pipSt * B.sideZ;
@@ -339,6 +431,18 @@ export function buildMaquina10(M, opts) {
     for (const v of parts.valves) v.led.material.color.setHex(st.valves[v.tipo] ? 0x35ff6a : 0x334033);
     // raio-X: carenagem e portas transparentes
     for (const m of parts.skinMats) { const op = (m.userData.op0 ?? 1) * (1 - 0.85 * st.xray); m.opacity = op; m.transparent = m.userData.tr0 || st.xray > 0.01; m.depthWrite = st.xray < 0.5 && !m.userData.tr0; m.needsUpdate = m._x !== (st.xray > 0.01); m._x = st.xray > 0.01; }
+  };
+  parts.drawBalanca = (B) => {                       // indicador de peso do berço (g) — só redesenha quando muda
+    if (!B.disp) return;
+    const lk = st.lock > 0.5, g_ = Math.round(B.massa * 1000);
+    const key = g_ + '|' + lk + '|' + B.balMsg; if (key === B.disp.key) return; B.disp.key = key;
+    const g = B.disp.g; g.fillStyle = '#071017'; g.fillRect(0, 0, 256, 128);
+    g.fillStyle = lk ? '#ffa21a' : '#35ff6a'; g.font = 'bold 22px system-ui'; g.fillText(`G${B.k} · ${lk ? 'TRAVADA' : 'PESANDO'}`, 10, 28);
+    g.fillStyle = '#e8f6ff'; g.font = 'bold 50px ui-monospace,Consolas,monospace'; g.textAlign = 'right';
+    g.fillText(lk ? '— — —' : (g_ / 1000).toFixed(3).replace('.', ','), 214, 88); g.textAlign = 'left';
+    g.font = 'bold 22px system-ui'; g.fillText('kg', 220, 88);
+    g.fillStyle = '#9fd0ff'; g.font = '17px system-ui'; g.fillText(B.balMsg || 'célula 30 kg · C3', 10, 118);
+    B.disp.tex.needsUpdate = true;
   };
   parts.drawIHM = (linha1, linha2, cor = '#2fbf71') => {
     const key = linha1 + '|' + linha2 + '|' + parts.bottles.map((b) => (b.levelSt * 20 | 0) + (b.tint > 0.5 ? 'a' : 'b')).join(''); const now = performance.now();

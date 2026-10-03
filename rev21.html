@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Sala de Dinamização CMR · REV22</title>
+<title>Sala de Dinamização CMR · REV21 (cilindros)</title>
 <style>
   :root { --bg:#0f1419; --pn:rgba(18,24,32,.86); --tx:#e8eef3; --mu:#9fb0bf; --ac:#2fbf71; --ac2:#3d8bfd; --wr:#f5b31a; }
   html,body { margin:0; height:100%; background:#1b2229; color:var(--tx); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
@@ -39,14 +39,14 @@
 </head>
 <body>
 <div id="load">
-  <div style="font-size:18px;font-weight:650">Sala de Dinamização · REV22 · 4 × CMR 3 × 10 L com pesagem</div>
-  <div style="color:#9fb0bf;text-align:center;max-width:86vw">garrafões de 10 L borosilicato 3.3 · tampa GL80 · célula de carga por garrafão · grampo no berço · dosagem por peso · processo completo com som</div>
+  <div style="font-size:18px;font-weight:650">Sala de Dinamização · REV21 · 4 × CMR 3 × 10 L</div>
+  <div style="color:#9fb0bf;text-align:center;max-width:86vw">garrafões de 10 L borosilicato 3.3 · tampa GL80 · fixação por cilindro · pipetagem 60 mL · processo completo com som</div>
   <div class="bar"><i id="pg"></i></div>
   <div id="lt" style="color:#9fb0bf">carregando modelos…</div>
   <button id="start">▶ Iniciar com som</button>
 </div>
 <div id="top">
-  <div class="t"><h1>Sala de Dinamização 01 · REV22 · 4 × (3 × 10 L) · pesagem</h1><small>Tempo acelerado 3× · ciclo ≈ 8:40 (dosagem 7 L 1:45 · mistura 5:00) · partida escalonada 2 min · som espacial</small></div>
+  <div class="t"><h1>Sala de Dinamização 01 · REV21 · 4 × (3 × 10 L)</h1><small>Tempo acelerado 3× · ciclo ≈ 8:40 (dosagem 7 L 1:45 · mistura 5:00) · partida escalonada 2 min · som espacial</small></div>
   <div id="fases"></div>
 </div>
 <div id="bar">
@@ -57,16 +57,14 @@
   <span id="clk"></span>
   <select id="cam" title="Câmera">
     <option value="geral">Visão geral</option><option value="operadora">Seguir operadora</option><option value="supervisor">Seguir supervisor</option>
-    <option value="m1">Máquina M1</option><option value="bocais">Bocais M1 (pipetagem 60 mL)</option><option value="berco">Berço de pesagem M1</option><option value="tv">TV de indicadores</option><option value="tanque">Tanque TQ-01</option><option value="entrada2">Porta do Espaço Memória</option><option value="memoria">Espaço Memória (Grupo Real)</option><option value="livre">Livre</option>
+    <option value="m1">Máquina M1</option><option value="bocais">Bocais M1 (pipetagem 60 mL)</option><option value="tv">TV de indicadores</option><option value="tanque">Tanque TQ-01</option><option value="entrada2">Porta do Espaço Memória</option><option value="memoria">Espaço Memória (Grupo Real)</option><option value="livre">Livre</option>
   </select>
   <button id="snd" class="on" title="Som">🔊</button>
   <span id="vrslot"></span>
   <a href="apresentacao.html" style="background:#2fbf71;color:#fff;border-radius:8px;padding:6px 12px;text-decoration:none;font-weight:600">🎬 Apresentação REV20</a>
-  <a href="berco.html" style="background:#1f5fae;color:#fff;border-radius:8px;padding:6px 12px;text-decoration:none;font-weight:600">⚖ Berço de pesagem</a>
-  <a href="rev21.html" style="background:#26323d;color:#e8eef3;border:1px solid #3a4854;border-radius:8px;padding:6px 12px;text-decoration:none">REV21 (cilindros)</a>
   <a href="rev17.html" style="background:#26323d;color:#e8eef3;border:1px solid #3a4854;border-radius:8px;padding:6px 12px;text-decoration:none">Sala REV17 (6 × 5 L)</a>
-  <small style="color:#9fb0bf;flex-basis:100%">REV22: cada garrafão fica num berço com célula de carga própria e grampo de alavanca no próprio berço (fecha uma vez por lote) · travas levantam a plataforma na mistura · etapas: destravar e tarar → dosar por peso (6,790 kg) → conferir nível → pipetar 60 mL em G1–G3 (sensor de garfo) → CONFIRMAR → mistura 5:00 → estabilizar → drenar 21 L para o TQ-01 → 2º ciclo automático → liberar garrafões → transferência → pausa do café · Espaço Memória: clique/toque na porta branca à esquerda da parede de entrada · AR no celular: aponte para o piso e toque para posicionar; 1 dedo arrasta, 2 dedos giram · AR no Quest: gatilho posiciona, segure para arrastar · VR: analógico esq. anda, dir. gira · A = play/pausa · B = velocidade · Modo Operar (treinamento) continua na sala REV17</small>
+  <small style="color:#9fb0bf;flex-basis:100%">REV21: as 4 máquinas são dinamizadoras de 3 garrafões de 10 L (acesso só pela frente) · etapas: fixar (cilindros) → dosar 7 L → conferir nível → pipetar 60 mL em G1–G3 (sensor de garfo) → CONFIRMAR → mistura 5:00 → estabilizar → drenar 21 L para o TQ-01 → 2º ciclo automático → liberar garrafões → transferência → pausa do café · Espaço Memória: clique/toque na porta branca à esquerda da parede de entrada · AR no celular: aponte para o piso e toque para posicionar; 1 dedo arrasta, 2 dedos giram · AR no Quest: gatilho posiciona, segure para arrastar · VR: analógico esq. anda, dir. gira · A = play/pausa · B = velocidade · Modo Operar (treinamento) continua na sala REV17</small>
 </div>
-<script type="module" src="./app22.js?v=22"></script>
+<script type="module" src="./app21.js?v=21"></script>
 </body>
 </html>
